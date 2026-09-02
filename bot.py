@@ -333,7 +333,7 @@ async def help_cmd(ctx):
     embed.add_field(name=f"`{BOT_PREFIX}status`", value="Kiểm tra Ping Discord, SFTP HidenCloud, Giờ VN & Lịch xoay key", inline=False)
     embed.add_field(name=f"`{BOT_PREFIX}testkey`", value="🧪 **[Test Gen Key]** Chạy thử chu trình gen key, test SFTP và gửi DM báo cáo", inline=False)
     embed.add_field(name=f"`{BOT_PREFIX}genkey`", value="🔑 **[Xoay Key Thật]** Sinh key mới, đẩy SFTP vào `apitoken.js` và DM báo kết quả", inline=False)
-    embed.add_field(name=f"`{BOT_PREFIX}key`", value="[Owner Only] Nhận `X-API-Key` đang hoạt động qua DM", inline=False)
+    embed.add_field(name=f"`{BOT_PREFIX}chat <nội dung>`", value="🤖 **[AI Qwen 2.5]** Trò chuyện trực tiếp với AI Hugging Face (test kết nối AI)", inline=False)
     embed.add_field(name=f"`{BOT_PREFIX}scan <url>`", value="Quét phân tích mối đe dọa URL/Website trong sandbox AI", inline=False)
     embed.set_footer(text=f"Tự động xoay key: Thứ 2, Thứ 4, Thứ 6 lúc 00:00 (Giờ VN)")
     await ctx.send(embed=embed)
@@ -473,12 +473,69 @@ async def scan_cmd(ctx, *, url: str = None):
     except Exception as e:
         await msg.edit(content=f"❌ Quét thất bại: `{e}`")
 
+# ── COMMAND: ?chat (AI QWEN 2.5 INTEGRATION) ──
+@bot.command(name="chat", aliases=["ask", "ai", "qwen"])
+async def chat_cmd(ctx, *, prompt: str = None):
+    """Trò chuyện trực tiếp với mô hình Qwen 2.5 AI trên Hugging Face."""
+    if not prompt:
+        return await ctx.send(f"⚠️ Cách dùng: `{BOT_PREFIX}chat <câu hỏi/tin nhắn>`\nVí dụ: `{BOT_PREFIX}chat Xin chào, bạn là ai?`")
+
+    async with ctx.typing():
+        t0 = time.monotonic()
+        try:
+            headers = {"X-API-Key": MASTER_KEY, "Content-Type": "application/json"}
+            payload = {
+                "messages": [
+                    {"role": "system", "content": "You are AIClaw, a smart and helpful AI assistant powered by Qwen 2.5, deployed on Hugging Face."},
+                    {"role": "user", "content": prompt}
+                ],
+                "author_id": str(ctx.author.id),
+                "guild_id": str(ctx.guild.id if ctx.guild else ""),
+                "max_tokens": 512,
+                "temperature": 0.7
+            }
+
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=45)) as session:
+                async with session.post(f"{AIO_GATEWAY_URL}/api/v1/chat", headers=headers, json=payload) as resp:
+                    latency = round((time.monotonic() - t0) * 1000)
+                    if resp.status == 200:
+                        data = await resp.json()
+                        reply = data.get("response", "Không nhận được phản hồi từ AI.")
+                        model_name = data.get("model", "Qwen/Qwen2.5-0.5B-Instruct")
+
+                        footer = f"\n\n*(⚡ {latency} ms · {model_name} on Hugging Face)*"
+                        if len(reply) + len(footer) > 1950:
+                            chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
+                            for idx, chunk in enumerate(chunks):
+                                if idx == len(chunks) - 1:
+                                    await ctx.reply(f"{chunk}{footer}")
+                                else:
+                                    await ctx.reply(chunk)
+                        else:
+                            await ctx.reply(f"{reply}{footer}")
+                    else:
+                        await ctx.reply(f"⚠️ Hugging Face AI Gateway báo lỗi HTTP {resp.status} (Ping: {latency} ms). Có thể Space đang khởi động hoặc chưa sẵn sàng.")
+        except asyncio.TimeoutError:
+            await ctx.reply("⏱️ Yêu cầu tới Hugging Face AI Gateway bị quá thời gian (Timeout). Cụm AI có thể đang bận hoặc đang khởi động mô hình.")
+        except Exception as e:
+            await ctx.reply(f"❌ Không thể kết nối tới Hugging Face AI Gateway: `{e}`")
+
 # ──────────────────────────────────────────────
 # AUTOMOD REAL-TIME INSPECTION
 # ──────────────────────────────────────────────
 @bot.event
 async def on_message(message: discord.Message):
-    if message.author.bot or not message.guild:
+    if message.author.bot:
+        return
+
+    # Trigger AI Chat if bot is mentioned
+    if bot.user and bot.user.mentioned_in(message) and not message.mention_everyone:
+        clean_text = message.clean_content.replace(f"@{bot.user.name}", "").strip()
+        if clean_text:
+            ctx = await bot.get_context(message)
+            return await chat_cmd(ctx, prompt=clean_text)
+
+    if not message.guild:
         await bot.process_commands(message)
         return
 

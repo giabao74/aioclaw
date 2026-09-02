@@ -33,7 +33,7 @@ Cuộn xuống phần **Environment Variables**, thêm các biến sau:
 | **`OWNER_ID`** | `1262304052361035857` |
 | **`AIO_GATEWAY_URL`** | `https://aegix-claw.prmgvyt.xyz` *(hoặc link direct của HF)* |
 | **`MASTER_OWNER_KEY`** | `Iamprmgvyt2013@` |
-| **`BOT_PREFIX`** | `.` |
+| **`BOT_PREFIX`** | `?` |
 | **`SFTP_HOST`** | `theo.hidencloud.com` |
 | **`SFTP_PORT`** | `2022` |
 | **`SFTP_USER`** | `prmgvyt-109674.e22ee400` |
@@ -48,8 +48,11 @@ Cuộn xuống phần **Environment Variables**, thêm các biến sau:
   1. Tự sinh API Key mới `aio_sec_...`
   2. Ghi đè file `apitoken.js` trên HidenCloud qua SFTP
   3. Gửi DM riêng cho Owner (`1262304052361035857`) với Embed báo cáo chi tiết!
-- **Lệnh Discord:**
-  - `.testkey`: Chạy thử chu trình gen key, kiểm tra SFTP và gửi DM báo cáo (không làm thay đổi file `apitoken.js` chính).
-  - `.genkey`: Xoay key thật ngay lập tức, đẩy SFTP vào `apitoken.js` và gửi DM báo cáo.
-  - `.status`: Kiểm tra ping Discord, ping SFTP HidenCloud, giờ Việt Nam hiện tại và lần xoay key kế tiếp.
+- **Lệnh Discord (Prefix `?`):**
+  - `?chat <nội dung>`: Trò chuyện trực tiếp với AI Qwen 2.5 trên Hugging Face (hoặc tag `@bot <tin nhắn>`).
+  - `?scan <url>`: Quét phân tích mối đe dọa website/URL qua AI Sandbox.
+  - `?testkey`: Chạy thử chu trình gen key, kiểm tra SFTP và gửi DM báo cáo (không làm thay đổi file `apitoken.js` chính).
+  - `?genkey`: Xoay key thật ngay lập tức, đẩy SFTP vào `apitoken.js` và gửi DM báo cáo.
+  - `?status`: Kiểm tra ping Discord, ping SFTP HidenCloud, giờ Việt Nam hiện tại và lần xoay key kế tiếp.
+
 
