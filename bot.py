@@ -3,25 +3,28 @@
 🦅 AI CLAW DISCORD BOT — Render.com Web Service Edition
 • 24/7 Hosting on Render.com (FastAPI Keepalive on $PORT)
 • Direct unblocked connection to Discord Gateway (Zero blocks / Zero ConnectionResetError)
+• Automated Key Rotation every MONDAY, WEDNESDAY, FRIDAY at 00:00 (Vietnam Time / UTC+7)
+• Automated SFTP Upload to HidenCloud (theo.hidencloud.com:2022/apitoken.js)
+• Instant Discord DM Notification to Owner with full telemetry report
+• On-Demand Commands: .testkey (thử nghiệm) & .genkey (xoay thật)
 • Powered by Hugging Face AI Gateway (https://aegix-claw.prmgvyt.xyz)
-• Real-time AI AutoMod & Domain Scanning
-• Owner DM Token Management & Key Rotation
 """
 
 import os
 import sys
 import time
+import secrets
 import asyncio
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import aiohttp
 import discord
 from discord.ext import commands
 from fastapi import FastAPI
-from pydantic import BaseModel
 import uvicorn
+import paramiko
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,48 +35,256 @@ log = logging.getLogger("aiclaw_render_bot")
 # ──────────────────────────────────────────────
 # CONFIGURATION
 # ──────────────────────────────────────────────
-DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", os.getenv("DISCORD_TOKEN", "")).strip()
+DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", os.getenv("DISCORD_TOKEN", "MTU0MjkyMzkwODMyNjYyMTM5NQ.GAX6dL.8DNoJu5shJY3FBPTeKEzynBtQU0rvpTY3XOlzk")).strip()
 OWNER_ID = int(os.getenv("NOTIFY_USER_ID", os.getenv("OWNER_ID", "1262304052361035857")))
 MASTER_KEY = os.getenv("MASTER_OWNER_KEY", os.getenv("AIO_RESET_TOKEN", "Iamprmgvyt2013@")).strip()
 AIO_GATEWAY_URL = os.getenv("AIO_GATEWAY_URL", "https://aegix-claw.prmgvyt.xyz").rstrip("/")
 BOT_PREFIX = os.getenv("BOT_PREFIX", ".").strip()
 PORT = int(os.getenv("PORT", 10000))
 
-# Fallback active key holder (cached from HF)
+# SFTP Credentials (HidenCloud)
+SFTP_HOST = os.getenv("SFTP_HOST", "theo.hidencloud.com")
+SFTP_PORT = int(os.getenv("SFTP_PORT", 2022))
+SFTP_USER = os.getenv("SFTP_USER", "prmgvyt-109674.e22ee400")
+SFTP_PASS = os.getenv("SFTP_PASS", "Iamprmgvyt2013@")
+SFTP_FILE = os.getenv("SFTP_FILE", "apitoken.js")
+
+# Schedule settings (Vietnam Time UTC+7)
+VN_TZ = timezone(timedelta(hours=7))
+ROTATION_HOUR_VN = int(os.getenv("ROTATION_HOUR_VN", 0))  # 00:00 AM VN Time
+ROTATION_DAYS_VN = [0, 2, 4]  # 0 = Thứ 2 (Mon), 2 = Thứ 4 (Wed), 4 = Thứ 6 (Fri)
+
+# Runtime State
 cached_active_key = os.getenv("AIO_API_KEY", "")
+last_rotation_date_vn = ""
+bot_start_time = time.time()
 
-async def get_latest_api_key() -> str:
-    """Fetches the latest active API key from Hugging Face AI Gateway."""
-    global cached_active_key
+# ──────────────────────────────────────────────
+# TIME & SCHEDULER HELPERS (VIETNAM TIME UTC+7)
+# ──────────────────────────────────────────────
+def get_now_vn() -> datetime:
+    """Returns current datetime in Vietnam Time (UTC+7)."""
+    return datetime.now(VN_TZ)
+
+def format_vn_time(dt: datetime = None) -> str:
+    if dt is None:
+        dt = get_now_vn()
+    days_vi = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"]
+    day_name = days_vi[dt.weekday()]
+    return f"{day_name}, {dt.strftime('%d/%m/%Y %H:%M:%S')} (Giờ VN)"
+
+def calculate_next_rotation_vn(now: datetime = None) -> str:
+    """Calculates the next upcoming rotation date (Mon, Wed, or Fri at ROTATION_HOUR_VN:00 VN)."""
+    if now is None:
+        now = get_now_vn()
+    
+    current = now.replace(minute=0, second=0, microsecond=0)
+    for i in range(1, 14):
+        candidate = current + timedelta(days=i)
+        candidate = candidate.replace(hour=ROTATION_HOUR_VN)
+        if candidate.weekday() in ROTATION_DAYS_VN and candidate > now:
+            return format_vn_time(candidate)
+    return "Thứ 2 tuần tới"
+
+# ──────────────────────────────────────────────
+# SFTP ENGINE (HIDENCLOUD)
+# ──────────────────────────────────────────────
+def upload_sftp_token(key: str, is_test: bool = False) -> tuple:
+    """
+    Connects to HidenCloud SFTP and writes apitoken.js (or apitoken_test.js for test).
+    Returns (success: bool, detail: str, latency_ms: float).
+    """
+    t0 = time.monotonic()
+    target_filename = "apitoken_test.js" if is_test else SFTP_FILE
+
     try:
-        headers = {"X-Reset-Token": MASTER_KEY}
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4)) as session:
-            async with session.get(f"{AIO_GATEWAY_URL}/api/v1/active-token", headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    key = data.get("api_key")
-                    if key:
-                        cached_active_key = key
-                        return key
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(
+            hostname=SFTP_HOST,
+            port=SFTP_PORT,
+            username=SFTP_USER,
+            password=SFTP_PASS,
+            timeout=10
+        )
+        sftp = ssh.open_sftp()
+
+        now_str = format_vn_time()
+        next_str = calculate_next_rotation_vn()
+        js_content = (
+            f"// Auto-generated by AIO Claw Security Rotator ({'TEST MODE' if is_test else 'PRODUCTION'})\n"
+            f"// Updated: {now_str}\n"
+            f"// Schedule: Thứ 2, Thứ 4, Thứ 6 lúc 00:00 (Giờ VN)\n"
+            f"module.exports = {{\n"
+            f"    AIO_API_KEY: \"{key}\",\n"
+            f"    UPDATED_AT: \"{now_str}\",\n"
+            f"    NEXT_ROTATION: \"{next_str}\"\n"
+            f"}};\n"
+        )
+
+        with sftp.file(target_filename, "w") as f:
+            f.write(js_content)
+
+        sftp.close()
+        ssh.close()
+        latency = round((time.monotonic() - t0) * 1000, 1)
+        log.info(f"✅ SFTP Uploaded to {SFTP_HOST}:{SFTP_PORT}/{target_filename} ({latency}ms)")
+        return True, f"Thành công ghi file `{target_filename}` ({latency} ms)", latency
     except Exception as e:
-        log.warning(f"Could not fetch active token from HF gateway: {e}")
-    return cached_active_key or MASTER_KEY
+        latency = round((time.monotonic() - t0) * 1000, 1)
+        log.error(f"❌ SFTP Error ({SFTP_HOST}:{SFTP_PORT}): {e}")
+        return False, f"Lỗi SFTP: {e}", latency
 
 # ──────────────────────────────────────────────
-# FASTAPI KEEPALIVE WEB SERVER (For Render.com)
+# CORE KEY ROTATION & NOTIFICATION LOGIC
 # ──────────────────────────────────────────────
-app = FastAPI(title="AIClaw Render Keepalive", version="2.2.0")
+async def execute_unified_rotation(is_test: bool = False, trigger_source: str = "Tự động (Lịch Thứ 2-4-6)") -> dict:
+    """
+    Executes key rotation:
+    1. Generates test/production token
+    2. Uploads via SFTP to HidenCloud
+    3. Syncs with Hugging Face Gateway
+    4. Sends comprehensive Discord DM to Owner
+    """
+    global cached_active_key
+    start_time = time.monotonic()
+    
+    prefix_type = "aio_sec_test_" if is_test else "aio_sec_"
+    new_token = f"{prefix_type}{secrets.token_hex(16)}"
+
+    if not is_test:
+        cached_active_key = new_token
+
+    # 1. SFTP Upload to HidenCloud
+    sftp_ok, sftp_msg, sftp_lat = upload_sftp_token(new_token, is_test=is_test)
+
+    # 2. Sync to Hugging Face AI Gateway (if not test)
+    hf_ok = False
+    hf_msg = "Không áp dụng cho bản thử nghiệm"
+    if not is_test:
+        try:
+            payload = {"reset_token": MASTER_KEY, "reason": f"Auto Rotation ({trigger_source})"}
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+                async with session.post(f"{AIO_GATEWAY_URL}/api/v1/reset-token", json=payload) as resp:
+                    if resp.status == 200:
+                        hf_ok = True
+                        hf_msg = "Đã đồng bộ vào bộ nhớ Hugging Face Space"
+                    else:
+                        hf_msg = f"HF Gateway trả về HTTP {resp.status}"
+        except Exception as e:
+            hf_msg = f"Lỗi kết nối HF Gateway: {e}"
+
+    # 3. Send Discord DM to Owner
+    dm_ok = False
+    try:
+        owner = bot.get_user(OWNER_ID) or await bot.fetch_user(OWNER_ID)
+        if owner:
+            now_vn_str = format_vn_time()
+            next_rot_str = calculate_next_rotation_vn()
+            color = 0xF59E0B if is_test else 0x22C55E
+            title = "🧪 [THỬ NGHIỆM] TEST GENERATE KEY & SFTP" if is_test else "🔑 [TỰ ĐỘNG] ĐÃ XOAY API KEY MỚI — THỨ 2, 4, 6"
+
+            embed = discord.Embed(
+                title=title,
+                description=f"Hệ thống bảo mật **AIO Claw Security Shield** vừa hoàn tất chu trình gen key!",
+                color=color,
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="🔑 API Token Mới", value=f"```{new_token}```", inline=False)
+            
+            sftp_status_icon = "🟢" if sftp_ok else "🔴"
+            embed.add_field(name=f"{sftp_status_icon} Máy chủ SFTP (HidenCloud)", value=f"• Host: `{SFTP_HOST}:{SFTP_PORT}`\n• Trạng thái: {sftp_msg}", inline=False)
+            
+            if not is_test:
+                hf_status_icon = "🟢" if hf_ok else "🟡"
+                embed.add_field(name=f"{hf_status_icon} Cụm AI Hugging Face", value=f"• URL: `{AIO_GATEWAY_URL}`\n• Trạng thái: {hf_msg}", inline=False)
+
+            embed.add_field(name="⏰ Thời gian thực hiện (Giờ VN)", value=f"`{now_vn_str}`", inline=True)
+            embed.add_field(name="📅 Lịch xoay key kế tiếp", value=f"`{next_rot_str}`", inline=True)
+            embed.add_field(name="🎯 Nguồn kích hoạt", value=f"`{trigger_source}`", inline=False)
+
+            if is_test:
+                embed.set_footer(text="⚠️ Đây là bản test kết nối. File apitoken.js chính không bị thay đổi.")
+            else:
+                embed.set_footer(text="Bot HidenCloud sẽ tự động nạp key mới 24/7 không gián đoạn.")
+
+            await owner.send(embed=embed)
+            dm_ok = True
+            log.info(f"✅ Sent rotation DM to Owner {OWNER_ID} successfully!")
+    except Exception as e:
+        log.error(f"❌ Failed to send DM to owner {OWNER_ID}: {e}")
+
+    total_time = round((time.monotonic() - start_time) * 1000, 1)
+    return {
+        "ok": sftp_ok,
+        "is_test": is_test,
+        "token": new_token,
+        "sftp_ok": sftp_ok,
+        "sftp_msg": sftp_msg,
+        "hf_ok": hf_ok,
+        "hf_msg": hf_msg,
+        "dm_ok": dm_ok,
+        "total_ms": total_time,
+        "time_vn": format_vn_time(),
+        "next_rotation_vn": calculate_next_rotation_vn()
+    }
+
+# ──────────────────────────────────────────────
+# BACKGROUND WORKER (MONDAY, WEDNESDAY, FRIDAY)
+# ──────────────────────────────────────────────
+async def scheduler_vn_worker():
+    """
+    Checks every 30 seconds for Vietnam Time (UTC+7).
+    Executes automated key rotation on:
+    • Monday (Thứ 2)
+    • Wednesday (Thứ 4)
+    • Friday (Thứ 6)
+    at ROTATION_HOUR_VN (default 00:00 VN Time).
+    """
+    global last_rotation_date_vn
+    await bot.wait_until_ready()
+    log.info(f"⏰ VN-Time Scheduler Worker activated: Schedule Mon/Wed/Fri at {ROTATION_HOUR_VN:02d}:00 (Giờ VN)")
+
+    while not bot.is_closed():
+        try:
+            now_vn = get_now_vn()
+            today_str = now_vn.strftime("%Y-%m-%d")
+            weekday = now_vn.weekday()  # 0=Mon, 2=Wed, 4=Fri
+
+            # Check if today is Mon/Wed/Fri, reached target hour, and not yet run today
+            if weekday in ROTATION_DAYS_VN and now_vn.hour >= ROTATION_HOUR_VN and last_rotation_date_vn != today_str:
+                days_vi = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"]
+                day_name = days_vi[weekday]
+                log.info(f"🔔 [TỰ ĐỘNG THEO LỊCH] Đến giờ xoay key ngày {day_name} ({today_str})! Đang khởi tạo...")
+                last_rotation_date_vn = today_str
+
+                # Execute rotation
+                res = await execute_unified_rotation(is_test=False, trigger_source=f"Tự động định kỳ {day_name} (Giờ VN)")
+                log.info(f"🎉 Auto-Rotation completed: SFTP={res['sftp_ok']}, DM={res['dm_ok']}")
+
+        except Exception as e:
+            log.error(f"Scheduler worker exception: {e}")
+
+        await asyncio.sleep(30)
+
+# ──────────────────────────────────────────────
+# FASTAPI KEEPALIVE WEB SERVER (Render.com)
+# ──────────────────────────────────────────────
+app = FastAPI(title="AIClaw Render Keepalive", version="2.3.0")
 
 @app.get("/")
 @app.get("/health")
 async def health_check():
+    now_vn = get_now_vn()
     return {
         "status": "online",
         "service": "AIClaw Discord Bot on Render.com",
-        "port": PORT,
+        "bot_user": str(bot.user) if bot.is_ready() else "Connecting...",
+        "vietnam_time": format_vn_time(now_vn),
+        "next_scheduled_rotation": calculate_next_rotation_vn(now_vn),
+        "sftp_server": f"{SFTP_HOST}:{SFTP_PORT}",
         "gateway": AIO_GATEWAY_URL,
-        "bot_online": bot.is_ready() if "bot" in globals() else False,
-        "uptime_sec": int(time.time() - bot_start_time) if "bot_start_time" in globals() else 0
+        "uptime_sec": int(time.time() - bot_start_time)
     }
 
 # ──────────────────────────────────────────────
@@ -83,53 +294,109 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents, help_command=None)
-bot_start_time = time.time()
 
 @bot.event
 async def on_ready():
     log.info(f"🎉 SUCCESS: AIClaw Bot logged in as {bot.user} (ID: {bot.user.id}) on Render.com!")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Threats & AutoMod | .help"))
     
-    # Notify Owner on startup
+    # Start Scheduler Task
+    asyncio.create_task(scheduler_vn_worker())
+
+    # Startup DM to Owner
     try:
         owner = bot.get_user(OWNER_ID) or await bot.fetch_user(OWNER_ID)
         if owner:
             embed = discord.Embed(
-                title="🟢 AIClaw Bot Online (Render.com)",
-                description=f"Bot đã khởi động thành công trên **Render.com** và kết nối trực tiếp đến **Cụm AI Hugging Face**!",
+                title="🟢 AIClaw Bot Đã Online (Render.com)",
+                description=f"Bot đã khởi động thành công trên **Render.com** và kết nối trực tiếp đến **HidenCloud SFTP** & **Hugging Face AI**!",
                 color=0x22C55E,
                 timestamp=discord.utils.utcnow()
             )
-            embed.add_field(name="AI Gateway", value=f"`{AIO_GATEWAY_URL}`", inline=False)
-            embed.add_field(name="Hosting Platform", value="`Render.com (Zero Blocks)`", inline=True)
-            embed.add_field(name="Prefix", value=f"`{BOT_PREFIX}`", inline=True)
+            embed.add_field(name="📅 Lịch Auto Gen Key", value="`Mỗi Thứ 2, Thứ 4, Thứ 6 lúc 00:00 (Giờ VN)`", inline=False)
+            embed.add_field(name="⏰ Giờ Việt Nam hiện tại", value=f"`{format_vn_time()}`", inline=True)
+            embed.add_field(name="📅 Lần xoay kế tiếp", value=f"`{calculate_next_rotation_vn()}`", inline=True)
+            embed.add_field(name="🖥️ SFTP Server", value=f"`{SFTP_HOST}:{SFTP_PORT}`", inline=False)
+            embed.add_field(name="Lệnh quản lý", value=f"• `{BOT_PREFIX}testkey`: Test thử nghiệm gen key + SFTP + DM\n• `{BOT_PREFIX}genkey`: Xoay key thật ngay lập tức\n• `{BOT_PREFIX}status`: Xem trạng thái hệ thống", inline=False)
             await owner.send(embed=embed)
     except Exception as e:
         log.warning(f"Could not send startup DM to owner: {e}")
 
+# ── COMMAND: .help ──
 @bot.command(name="help")
 async def help_cmd(ctx):
     embed = discord.Embed(
-        title="🦅 AIClaw Bot — Danh sách lệnh",
-        description="Bot Bảo mật & AutoMod 24/7 host trên Render.com kết nối Hugging Face AI.",
+        title="🦅 AIClaw Bot — Bảng điều khiển lệnh",
+        description="Bot Bảo mật & AutoMod 24/7 host trên Render.com kết nối Hugging Face AI & HidenCloud SFTP.",
         color=0x6366F1
     )
-    embed.add_field(name=f"`{BOT_PREFIX}status`", value="Kiểm tra ping Discord, Render uptime & trạng thái AI Gateway", inline=False)
-    embed.add_field(name=f"`{BOT_PREFIX}scan <url>`", value="Quét phân tích mối đe dọa URL/Website trong sandbox", inline=False)
+    embed.add_field(name=f"`{BOT_PREFIX}status`", value="Kiểm tra Ping Discord, SFTP HidenCloud, Giờ VN & Lịch xoay key", inline=False)
+    embed.add_field(name=f"`{BOT_PREFIX}testkey`", value="🧪 **[Test Gen Key]** Chạy thử chu trình gen key, test SFTP và gửi DM báo cáo", inline=False)
+    embed.add_field(name=f"`{BOT_PREFIX}genkey`", value="🔑 **[Xoay Key Thật]** Sinh key mới, đẩy SFTP vào `apitoken.js` và DM báo kết quả", inline=False)
     embed.add_field(name=f"`{BOT_PREFIX}key`", value="[Owner Only] Nhận `X-API-Key` đang hoạt động qua DM", inline=False)
-    embed.add_field(name=f"`{BOT_PREFIX}resetkey <master_token>`", value="[Owner Only] Ép xoay key mới trên Hugging Face & đẩy qua SFTP HidenCloud", inline=False)
-    embed.set_footer(text="AIClaw Unified Security Shield v2.2")
+    embed.add_field(name=f"`{BOT_PREFIX}scan <url>`", value="Quét phân tích mối đe dọa URL/Website trong sandbox AI", inline=False)
+    embed.set_footer(text=f"Tự động xoay key: Thứ 2, Thứ 4, Thứ 6 lúc 00:00 (Giờ VN)")
     await ctx.send(embed=embed)
 
+# ── COMMAND: .testkey (TEST GEN KEY) ──
+@bot.command(name="testkey", aliases=["testgenkey", "testrotation"])
+async def testkey_cmd(ctx):
+    """Generates a mock key, tests SFTP upload and sends test DM to Owner."""
+    if ctx.author.id != OWNER_ID:
+        return await ctx.send("❌ Quyền truy cập bị từ chối: Chỉ Owner mới có thể chạy test gen key.")
+
+    msg = await ctx.send("🧪 **Đang tiến hành TEST GEN KEY...** (Kiểm tra SFTP HidenCloud & gửi DM kết quả)")
+    res = await execute_unified_rotation(is_test=True, trigger_source=f"Lệnh thủ công {BOT_PREFIX}testkey từ <@{ctx.author.id}>")
+
+    sftp_icon = "🟢" if res["sftp_ok"] else "🔴"
+    dm_icon = "🟢" if res["dm_ok"] else "🔴"
+
+    result_text = (
+        f"✅ **KẾT QUẢ TEST GEN KEY:**\n"
+        f"• **Key thử nghiệm:** `{res['token']}`\n"
+        f"• **Kết nối SFTP HidenCloud:** {sftp_icon} {res['sftp_msg']}\n"
+        f"• **Gửi DM báo cáo:** {dm_icon} {'Đã gửi tin nhắn riêng cho bạn' if res['dm_ok'] else 'Lỗi gửi DM'}\n"
+        f"• **Thời gian thực thi:** `{res['total_ms']} ms`\n"
+        f"• **Lịch xoay tự động kế tiếp:** `{res['next_rotation_vn']}`\n"
+        f"*(Lưu ý: File chính `apitoken.js` không bị ảnh hưởng khi test)*"
+    )
+    await msg.edit(content=result_text)
+
+# ── COMMAND: .genkey (REAL KEY ROTATION) ──
+@bot.command(name="genkey", aliases=["rotatekey", "resetkey"])
+async def genkey_cmd(ctx):
+    """Generates a real key, pushes to apitoken.js via SFTP, updates Hugging Face, and DMs Owner."""
+    if ctx.author.id != OWNER_ID:
+        return await ctx.send("❌ Quyền truy cập bị từ chối: Chỉ Owner mới có quyền xoay key thật.")
+
+    msg = await ctx.send("⏳ **Đang xoay API KEY THẬT...** (Đang ghi `apitoken.js` qua SFTP HidenCloud & gửi DM)")
+    res = await execute_unified_rotation(is_test=False, trigger_source=f"Lệnh thủ công {BOT_PREFIX}genkey từ <@{ctx.author.id}>")
+
+    sftp_icon = "🟢" if res["sftp_ok"] else "🔴"
+    dm_icon = "🟢" if res["dm_ok"] else "🔴"
+
+    result_text = (
+        f"🎉 **ĐÃ XOAY API KEY THẬT THÀNH CÔNG!**\n"
+        f"• **Key mới:** `{res['token']}`\n"
+        f"• **Đẩy SFTP HidenCloud (`apitoken.js`):** {sftp_icon} {res['sftp_msg']}\n"
+        f"• **Gửi DM báo cáo:** {dm_icon} {'Đã gửi DM riêng đầy đủ cho bạn' if res['dm_ok'] else 'Lỗi gửi DM'}\n"
+        f"• **Lịch tự động kế tiếp:** `{res['next_rotation_vn']}`\n"
+        f"*(Server Discord bot của bạn trên HidenCloud sẽ tự động auto-reload key này 24/7)*"
+    )
+    await msg.edit(content=result_text)
+
+# ── COMMAND: .status ──
 @bot.command(name="status", aliases=["ping", "health"])
 async def status_cmd(ctx):
     uptime_sec = int(time.time() - bot_start_time)
     uptime_str = f"{uptime_sec // 3600}h {(uptime_sec % 3600) // 60}m {uptime_sec % 60}s"
     ws_ping = round(bot.latency * 1000)
 
-    # Check Hugging Face AI Gateway health
+    # Test SFTP Latency
+    _, sftp_detail, sftp_latency = upload_sftp_token("ping_test", is_test=True)
+
+    # Test Hugging Face Gateway Ping
     gw_status = "🔴 Offline"
-    gw_ping = 0
     try:
         t0 = time.monotonic()
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4)) as session:
@@ -142,65 +409,40 @@ async def status_cmd(ctx):
     except Exception:
         gw_status = "🔴 Unreachable"
 
-    embed = discord.Embed(title="🛡️ AIClaw Telemetry Status", color=0x22C55E)
+    embed = discord.Embed(title="🛡️ AIClaw Telemetry & Lịch Trình", color=0x22C55E)
     embed.add_field(name="Discord Ping", value=f"`{ws_ping} ms`", inline=True)
+    embed.add_field(name="SFTP HidenCloud Ping", value=f"`{sftp_latency} ms`", inline=True)
     embed.add_field(name="Bot Uptime", value=f"`{uptime_str}`", inline=True)
-    embed.add_field(name="Host Platform", value="`Render.com`", inline=True)
+    embed.add_field(name="Giờ Việt Nam (UTC+7)", value=f"`{format_vn_time()}`", inline=False)
+    embed.add_field(name="📅 Lịch Auto Gen Key", value="`Mỗi Thứ 2, Thứ 4, Thứ 6 lúc 00:00 (Giờ VN)`", inline=False)
+    embed.add_field(name="⏰ Lần Xoay Tiếp Theo", value=f"`{calculate_next_rotation_vn()}`", inline=True)
     embed.add_field(name="Hugging Face AI Gateway", value=f"`{AIO_GATEWAY_URL}`\n{gw_status}", inline=False)
-    embed.set_footer(text="AIO Claw Security Shield")
+    embed.set_footer(text="Hệ thống giám sát bảo mật AIO Claw v2.3")
     await ctx.send(embed=embed)
 
-@bot.command(name="key", aliases=["token", "getkey"])
+# ── COMMAND: .key ──
+@bot.command(name="key", aliases=["token"])
 async def key_cmd(ctx):
     if ctx.author.id != OWNER_ID:
-        return await ctx.send("❌ Quyền truy cập bị từ chối: Chỉ Bot Owner mới có quyền xem API Key.")
+        return await ctx.send("❌ Quyền truy cập bị từ chối: Chỉ Owner mới có thể xem key.")
 
-    active_key = await get_latest_api_key()
-    try:
-        embed = discord.Embed(
-            title="🔑 AIClaw — Active API Key",
-            description=f"Khóa bảo mật hiện tại được nạp từ Hugging Face AI Gateway.",
-            color=0x22C55E,
-            timestamp=discord.utils.utcnow()
-        )
-        embed.add_field(name="Current `X-API-Key`", value=f"```{active_key}```", inline=False)
-        embed.add_field(name="AI Gateway Endpoint", value=f"`{AIO_GATEWAY_URL}`", inline=False)
-        embed.set_footer(text="Master Key: Iamprmgvyt2013@ (Admin Only)")
-        await ctx.author.send(embed=embed)
-        await ctx.send("📬 **Khóa API hiện tại đã được gửi vào Direct Messages của bạn!**")
-    except Exception as e:
-        await ctx.send(f"⚠️ Không thể gửi DM: `{e}` (Hãy mở chặn tin nhắn từ thành viên server).")
+    embed = discord.Embed(
+        title="🔑 AIClaw — Khóa API Hiện Tại",
+        description="Khóa bảo mật đang đồng bộ với file `apitoken.js` trên HidenCloud.",
+        color=0x22C55E,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.add_field(name="Current Key", value=f"```{cached_active_key or 'aio_sec_...'}```", inline=False)
+    embed.add_field(name="Lịch xoay tự động", value="`Thứ 2, Thứ 4, Thứ 6 lúc 00:00 (Giờ VN)`", inline=False)
+    embed.add_field(name="Lần xoay kế tiếp", value=f"`{calculate_next_rotation_vn()}`", inline=False)
+    await ctx.author.send(embed=embed)
+    await ctx.send("📬 **Khóa API đã được gửi vào Direct Messages của bạn!**")
 
-@bot.command(name="resetkey", aliases=["rotatekey", "forcerotate"])
-async def resetkey_cmd(ctx, *, master_token: str = None):
-    if ctx.author.id != OWNER_ID:
-        return await ctx.send("❌ Quyền truy cập bị từ chối.")
-
-    if not master_token or master_token.strip() != MASTER_KEY:
-        return await ctx.send(f"❌ **Sai Master Reset Token!**\nCách dùng: `{BOT_PREFIX}resetkey <master_token>`")
-
-    msg = await ctx.send("⏳ Đang gửi lệnh xoay key tới Hugging Face Space & đẩy SFTP tới HidenCloud...")
-    try:
-        payload = {"reset_token": master_token.strip(), "reason": f"Manual Reset by Owner <@{OWNER_ID}> via Render Bot"}
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
-            async with session.post(f"{AIO_GATEWAY_URL}/api/v1/reset-token", json=payload) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    new_key = data.get("new_api_key", "N/A")
-                    sftp_ok = data.get("sftp_synced", False)
-                    sftp_detail = data.get("sftp_detail", "SFTP Sync Success")
-                    sftp_icon = "🟢 Đã đồng bộ SFTP" if sftp_ok else "⚠️ Lỗi SFTP"
-
-                    await msg.edit(content=f"✅ **Đã xoay API Key thành công!**\n• Key mới: `aio_sec_...`\n• Trạng thái: {sftp_icon} ({sftp_detail})\n• Server HidenCloud đã auto-reload token mới!")
-                else:
-                    await msg.edit(content=f"❌ Hugging Face Gateway báo lỗi HTTP {resp.status}")
-    except Exception as e:
-        await msg.edit(content=f"❌ Lỗi gửi request tới Hugging Face Gateway: `{e}`")
-
+# ── COMMAND: .scan ──
 @bot.command(name="scan")
 async def scan_cmd(ctx, *, url: str = None):
     if not url:
-        return await ctx.send(f"⚠️ Cách dùng: `{BOT_PREFIX}scan <url>`\nVí dụ: `{BOT_PREFIX}scan https://example.com`")
+        return await ctx.send(f"⚠️ Cách dùng: `{BOT_PREFIX}scan <url>`")
 
     clean_url = url.strip().strip("<>")
     if not clean_url.lower().startswith(("http://", "https://")):
@@ -208,8 +450,7 @@ async def scan_cmd(ctx, *, url: str = None):
 
     msg = await ctx.send(f"🔍 Đang chuyển URL `{clean_url}` tới Cụm AI Sandbox trên Hugging Face để phân tích...")
     try:
-        active_key = await get_latest_api_key()
-        headers = {"X-API-Key": active_key, "Content-Type": "application/json"}
+        headers = {"X-API-Key": cached_active_key or MASTER_KEY, "Content-Type": "application/json"}
         payload = {"url": clean_url}
 
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
@@ -223,12 +464,12 @@ async def scan_cmd(ctx, *, url: str = None):
                         timestamp=discord.utils.utcnow()
                     )
                     embed.add_field(name="URL mục tiêu", value=f"`{clean_url}`", inline=False)
-                    embed.add_field(name="URL chuyển hướng đến", value=f"`{data.get('final_url', clean_url)}`", inline=False)
+                    embed.add_field(name="URL chuyển hướng", value=f"`{data.get('final_url', clean_url)}`", inline=False)
                     embed.add_field(name="Tiêu đề trang", value=f"{data.get('title', 'N/A')}", inline=True)
                     embed.add_field(name="Đánh giá an toàn", value="⚠️ **PHÁT HIỆN MỐI ĐE DỌA (Phishing / Scam)**" if danger else "✅ **AN TOÀN / SẠCH**", inline=True)
                     await msg.edit(content=None, embed=embed)
                 else:
-                    await msg.edit(content=f"⚠️ Cụm Scanner Hugging Face trả về mã HTTP {resp.status}")
+                    await msg.edit(content=f"⚠️ Cụm Scanner Hugging Face trả về HTTP {resp.status}")
     except Exception as e:
         await msg.edit(content=f"❌ Quét thất bại: `{e}`")
 
@@ -244,8 +485,7 @@ async def on_message(message: discord.Message):
     content = message.content.strip()
     if any(k in content.lower() for k in ["http://", "https://", "discord.gift", "nitro", "steamcommunity", "airdrop"]):
         try:
-            active_key = await get_latest_api_key()
-            headers = {"X-API-Key": active_key, "Content-Type": "application/json"}
+            headers = {"X-API-Key": cached_active_key or MASTER_KEY, "Content-Type": "application/json"}
             payload = {"content": content, "author_id": str(message.author.id), "guild_id": str(message.guild.id)}
 
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
@@ -284,5 +524,5 @@ if __name__ == "__main__":
     log.info(f"🚀 Render Web Server Keepalive listening on port {PORT}")
 
     # 2. Run Discord Bot on main thread
-    log.info("🤖 Starting Discord Bot on Render.com...")
+    log.info("🤖 Starting Discord Bot on Render.com with Mon/Wed/Fri VN Rotation Schedule...")
     bot.run(DISCORD_TOKEN)
