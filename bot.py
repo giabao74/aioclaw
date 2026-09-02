@@ -39,7 +39,7 @@ DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", os.getenv("DISCORD_TOKEN", "MTU0M
 OWNER_ID = int(os.getenv("NOTIFY_USER_ID", os.getenv("OWNER_ID", "1262304052361035857")))
 MASTER_KEY = os.getenv("MASTER_OWNER_KEY", os.getenv("AIO_RESET_TOKEN", "Iamprmgvyt2013@")).strip()
 AIO_GATEWAY_URL = os.getenv("AIO_GATEWAY_URL", "https://aegix-claw.prmgvyt.xyz").rstrip("/")
-BOT_PREFIX = os.getenv("BOT_PREFIX", ".").strip()
+BOT_PREFIX = os.getenv("BOT_PREFIX", "?").strip()
 PORT = int(os.getenv("PORT", 10000))
 
 # SFTP Credentials (HidenCloud)
@@ -163,7 +163,7 @@ async def execute_unified_rotation(is_test: bool = False, trigger_source: str = 
     hf_msg = "Không áp dụng cho bản thử nghiệm"
     if not is_test:
         try:
-            payload = {"reset_token": MASTER_KEY, "reason": f"Auto Rotation ({trigger_source})"}
+            payload = {"reset_token": MASTER_KEY, "new_key": new_token, "reason": f"Auto Rotation ({trigger_source})"}
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 async with session.post(f"{AIO_GATEWAY_URL}/api/v1/reset-token", json=payload) as resp:
                     if resp.status == 200:
@@ -450,7 +450,7 @@ async def scan_cmd(ctx, *, url: str = None):
 
     msg = await ctx.send(f"🔍 Đang chuyển URL `{clean_url}` tới Cụm AI Sandbox trên Hugging Face để phân tích...")
     try:
-        headers = {"X-API-Key": cached_active_key or MASTER_KEY, "Content-Type": "application/json"}
+        headers = {"X-API-Key": MASTER_KEY, "Content-Type": "application/json"}
         payload = {"url": clean_url}
 
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
@@ -485,7 +485,7 @@ async def on_message(message: discord.Message):
     content = message.content.strip()
     if any(k in content.lower() for k in ["http://", "https://", "discord.gift", "nitro", "steamcommunity", "airdrop"]):
         try:
-            headers = {"X-API-Key": cached_active_key or MASTER_KEY, "Content-Type": "application/json"}
+            headers = {"X-API-Key": MASTER_KEY, "Content-Type": "application/json"}
             payload = {"content": content, "author_id": str(message.author.id), "guild_id": str(message.guild.id)}
 
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
