@@ -58,6 +58,10 @@ ROTATION_DAYS_VN = [0, 2, 4]  # 0 = Thứ 2 (Mon), 2 = Thứ 4 (Wed), 4 = Thứ 
 cached_active_key = os.getenv("AIO_API_KEY", "")
 last_rotation_date_vn = ""
 bot_start_time = time.time()
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
+HF_ROUTER_MODEL = os.getenv("HF_ROUTER_MODEL", "Qwen/Qwen2.5-72B-Instruct").strip()
+current_ai_model = os.getenv("DEFAULT_AI_MODEL", "Qwen/Qwen2.5-72B-Instruct").strip()
 
 # ──────────────────────────────────────────────
 # TIME & SCHEDULER HELPERS (VIETNAM TIME UTC+7)
@@ -332,8 +336,8 @@ async def help_cmd(ctx):
     )
     embed.add_field(name=f"`{BOT_PREFIX}status`", value="Kiểm tra Ping Discord, SFTP HidenCloud, Giờ VN & Lịch xoay key", inline=False)
     embed.add_field(name=f"`{BOT_PREFIX}testkey`", value="🧪 **[Test Gen Key]** Chạy thử chu trình gen key, test SFTP và gửi DM báo cáo", inline=False)
-    embed.add_field(name=f"`{BOT_PREFIX}genkey`", value="🔑 **[Xoay Key Thật]** Sinh key mới, đẩy SFTP vào `apitoken.js` và DM báo kết quả", inline=False)
-    embed.add_field(name=f"`{BOT_PREFIX}chat <nội dung>`", value="🤖 **[AI Qwen 2.5]** Trò chuyện trực tiếp với AI Hugging Face (test kết nối AI)", inline=False)
+    embed.add_field(name=f"`{BOT_PREFIX}chat <nội dung>`", value="🤖 **[AI Chat]** Trò chuyện với AI thông minh (GPT-OSS 120B / Llama 3.3 70B)", inline=False)
+    embed.add_field(name=f"`{BOT_PREFIX}model`", value="🧠 Xem hoặc chuyển đổi mô hình AI (`?model gpt-oss-120b`, `?model llama-70b`)", inline=False)
     embed.add_field(name=f"`{BOT_PREFIX}scan <url>`", value="Quét phân tích mối đe dọa URL/Website trong sandbox AI", inline=False)
     embed.set_footer(text=f"Tự động xoay key: Thứ 2, Thứ 4, Thứ 6 lúc 00:00 (Giờ VN)")
     await ctx.send(embed=embed)
@@ -473,26 +477,149 @@ async def scan_cmd(ctx, *, url: str = None):
     except Exception as e:
         await msg.edit(content=f"❌ Quét thất bại: `{e}`")
 
-# ── COMMAND: ?chat (AI QWEN 2.5 INTEGRATION) ──
-@bot.command(name="chat", aliases=["ask", "ai", "qwen"])
+# ── COMMAND: ?model ──
+@bot.command(name="model", aliases=["models", "setmodel"])
+async def model_cmd(ctx, *, model_name: str = None):
+    """Xem hoặc đổi mô hình AI đang sử dụng (GPT-OSS 120B, Llama 3.3 70B, Qwen)."""
+    global current_ai_model
+    if not model_name:
+        embed = discord.Embed(
+            title="🧠 AIClaw — Cấu hình Mô hình Trí Tuệ Nhân Tạo",
+            description=f"Mô hình đang hoạt động hiện tại: **`{current_ai_model}`**",
+            color=0x6366F1
+        )
+        embed.add_field(
+            name="💡 Các Model Miễn Phí (Free Tier) đề xuất:",
+            value=(
+                "• **`openai/gpt-oss-120b:free`**: Model 117B MoE từ OpenAI, suy luận logic mạnh mẽ\n"
+                "• **`meta-llama/llama-3.3-70b-instruct:free`**: Llama 3.3 70B, thông minh vượt trội, tiếng Việt mượt mà\n"
+                "• **`openrouter/free`**: Bộ định tuyến tự động chọn model free mạnh nhất\n"
+                "• **`deepseek/deepseek-r1:free`**: Siêu mô hình suy luận chuyên sâu\n"
+                "• **`qwen-local`**: Mô hình local chạy trên Hugging Face CPU Space"
+            ),
+            inline=False
+        )
+        embed.add_field(
+            name="📝 Cách đổi mô hình:",
+            value=f"`{BOT_PREFIX}model <tên_model>`\nVí dụ: `{BOT_PREFIX}model openai/gpt-oss-120b:free`\nHoặc: `{BOT_PREFIX}model meta-llama/llama-3.3-70b-instruct:free`",
+            inline=False
+        )
+        return await ctx.send(embed=embed)
+
+    clean_model = model_name.strip()
+    if clean_model.lower() in ("default", "reset", "gpt", "gpt-oss", "120b", "gpt-oss-120b"):
+        current_ai_model = "openai/gpt-oss-120b:free"
+    elif clean_model.lower() in ("llama", "llama-70b", "llama-3.3", "70b"):
+        current_ai_model = "meta-llama/llama-3.3-70b-instruct:free"
+    elif clean_model.lower() in ("free", "auto", "router"):
+        current_ai_model = "openrouter/free"
+    elif clean_model.lower() in ("local", "qwen", "cpu"):
+        current_ai_model = "qwen-local"
+    else:
+        current_ai_model = clean_model
+
+    await ctx.send(f"✅ Đã chuyển mô hình AI sang: **`{current_ai_model}`**!\nHãy thử trò chuyện ngay bằng lệnh: `{BOT_PREFIX}chat <câu hỏi>`")
+
+# ── COMMAND: ?chat (AI MULTI-ENGINE INTEGRATION) ──
+@bot.command(name="chat", aliases=["ask", "ai", "qwen", "gpt"])
 async def chat_cmd(ctx, *, prompt: str = None):
-    """Trò chuyện trực tiếp với mô hình Qwen 2.5 AI trên Hugging Face."""
+    """Trò chuyện trực tiếp với AI thông minh (GPT-OSS 120B / Llama 70B / Qwen)."""
     if not prompt:
-        return await ctx.send(f"⚠️ Cách dùng: `{BOT_PREFIX}chat <câu hỏi/tin nhắn>`\nVí dụ: `{BOT_PREFIX}chat Xin chào, bạn là ai?`")
+        return await ctx.send(f"⚠️ Cách dùng: `{BOT_PREFIX}chat <câu hỏi/tin nhắn>`\nVí dụ: `{BOT_PREFIX}chat Xin chào, hãy giải thích cho tôi về lượng tử!`")
 
     async with ctx.typing():
         t0 = time.monotonic()
+
+        # 1. Direct Hugging Face High-Performance GPU Router
+        if HF_TOKEN and ("Qwen" in current_ai_model or "72B" in current_ai_model or "default" in current_ai_model.lower()):
+            try:
+                headers = {
+                    "Authorization": f"Bearer {HF_TOKEN}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "Qwen/Qwen2.5-72B-Instruct",
+                    "messages": [
+                        {"role": "system", "content": "You are AIClaw, a highly intelligent and helpful AI assistant powered by Hugging Face GPU Cluster and Qwen 2.5 72B. Answer clearly and informatively in Vietnamese if user writes in Vietnamese."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 768,
+                    "temperature": 0.7
+                }
+                connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+                async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=30)) as session:
+                    async with session.post("https://router.huggingface.co/v1/chat/completions", headers=headers, json=payload) as resp:
+                        latency = round((time.monotonic() - t0) * 1000)
+                        if resp.status == 200:
+                            data = await resp.json()
+                            reply = data["choices"][0]["message"]["content"]
+                            footer = f"\n\n*(⚡ {latency} ms · Qwen 2.5 72B on Hugging Face GPU)*"
+                            if len(reply) + len(footer) > 1950:
+                                chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
+                                for idx, chunk in enumerate(chunks):
+                                    if idx == len(chunks) - 1:
+                                        await ctx.reply(f"{chunk}{footer}")
+                                    else:
+                                        await ctx.reply(chunk)
+                            else:
+                                await ctx.reply(f"{reply}{footer}")
+                            return
+            except Exception as e:
+                log.warning(f"Direct HF Router call error, attempting fallback: {e}")
+
+        # 2. Direct OpenRouter query if OPENROUTER_API_KEY is configured directly on bot
+        if OPENROUTER_API_KEY:
+            try:
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://aegix-claw.prmgvyt.xyz",
+                    "X-Title": "AI Claw Security"
+                }
+                payload = {
+                    "model": current_ai_model,
+                    "messages": [
+                        {"role": "system", "content": "You are AIClaw, a highly intelligent and helpful AI assistant. Answer clearly and comprehensively in Vietnamese if the user writes in Vietnamese."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 768,
+                    "temperature": 0.7
+                }
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=40)) as session:
+                    async with session.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload) as resp:
+                        latency = round((time.monotonic() - t0) * 1000)
+                        if resp.status == 200:
+                            data = await resp.json()
+                            reply = data["choices"][0]["message"]["content"]
+                            model_used = data.get("model", current_ai_model)
+                            footer = f"\n\n*(⚡ {latency} ms · {model_used})*"
+                            if len(reply) + len(footer) > 1950:
+                                chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
+                                for idx, chunk in enumerate(chunks):
+                                    if idx == len(chunks) - 1:
+                                        await ctx.reply(f"{chunk}{footer}")
+                                    else:
+                                        await ctx.reply(chunk)
+                            else:
+                                await ctx.reply(f"{reply}{footer}")
+                            return
+            except Exception as e:
+                log.warning(f"Direct OpenRouter call error, falling back: {e}")
+
+        # 2. Fallback to Hugging Face AI Gateway
         try:
             headers = {"X-API-Key": MASTER_KEY, "Content-Type": "application/json"}
             payload = {
                 "messages": [
-                    {"role": "system", "content": "You are AIClaw, a smart and helpful AI assistant powered by Qwen 2.5, deployed on Hugging Face."},
+                    {"role": "system", "content": "You are AIClaw, a highly intelligent and helpful AI assistant. Answer clearly and informatively."},
                     {"role": "user", "content": prompt}
                 ],
                 "author_id": str(ctx.author.id),
                 "guild_id": str(ctx.guild.id if ctx.guild else ""),
                 "max_tokens": 512,
-                "temperature": 0.7
+                "temperature": 0.7,
+                "model": current_ai_model,
+                "openrouter_api_key": OPENROUTER_API_KEY or None
             }
 
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=45)) as session:
@@ -501,9 +628,9 @@ async def chat_cmd(ctx, *, prompt: str = None):
                     if resp.status == 200:
                         data = await resp.json()
                         reply = data.get("response", "Không nhận được phản hồi từ AI.")
-                        model_name = data.get("model", "Qwen/Qwen2.5-0.5B-Instruct")
+                        model_name = data.get("model", current_ai_model)
 
-                        footer = f"\n\n*(⚡ {latency} ms · {model_name} on Hugging Face)*"
+                        footer = f"\n\n*(⚡ {latency} ms · {model_name})*"
                         if len(reply) + len(footer) > 1950:
                             chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
                             for idx, chunk in enumerate(chunks):
@@ -514,11 +641,11 @@ async def chat_cmd(ctx, *, prompt: str = None):
                         else:
                             await ctx.reply(f"{reply}{footer}")
                     else:
-                        await ctx.reply(f"⚠️ Hugging Face AI Gateway báo lỗi HTTP {resp.status} (Ping: {latency} ms). Có thể Space đang khởi động hoặc chưa sẵn sàng.")
+                        await ctx.reply(f"⚠️ Hugging Face AI Gateway báo lỗi HTTP {resp.status} (Ping: {latency} ms).")
         except asyncio.TimeoutError:
-            await ctx.reply("⏱️ Yêu cầu tới Hugging Face AI Gateway bị quá thời gian (Timeout). Cụm AI có thể đang bận hoặc đang khởi động mô hình.")
+            await ctx.reply("⏱️ Yêu cầu tới AI Gateway bị quá thời gian (Timeout).")
         except Exception as e:
-            await ctx.reply(f"❌ Không thể kết nối tới Hugging Face AI Gateway: `{e}`")
+            await ctx.reply(f"❌ Không thể kết nối tới AI Gateway: `{e}`")
 
 # ──────────────────────────────────────────────
 # AUTOMOD REAL-TIME INSPECTION
