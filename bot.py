@@ -619,7 +619,8 @@ async def chat_cmd(ctx, *, prompt: str = None):
                 "max_tokens": 512,
                 "temperature": 0.7,
                 "model": current_ai_model,
-                "openrouter_api_key": OPENROUTER_API_KEY or None
+                "openrouter_api_key": OPENROUTER_API_KEY or None,
+                "hf_token": HF_TOKEN or None
             }
 
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=45)) as session:
