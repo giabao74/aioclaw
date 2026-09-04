@@ -34,6 +34,10 @@ Cuộn xuống phần **Environment Variables**, thêm các biến sau:
 | **`AIO_GATEWAY_URL`** | `https://aegix-claw.prmgvyt.xyz` *(hoặc link direct của HF)* |
 | **`MASTER_OWNER_KEY`** | `Iamprmgvyt2013@` |
 | **`BOT_PREFIX`** | `?` |
+| **`OPENROUTER_API_KEY`** | *(Tùy chọn)* Key OpenRouter để mở khóa **GPT-OSS 120B** & **Llama 3.3 70B** miễn phí (lấy tại `openrouter.ai/keys`) |
+| **`DEFAULT_AI_MODEL`** | `openai/gpt-oss-120b:free` *(hoặc `meta-llama/llama-3.3-70b-instruct:free`)* |
+| **`TURSO_DATABASE_URL`** | `libsql://ai-claw-iamprmgvyt.aws-ap-northeast-1.turso.io` |
+| **`TURSO_AUTH_TOKEN`** | Token Turso DB của bạn *(đã tích hợp sẵn)* |
 | **`SFTP_HOST`** | `theo.hidencloud.com` |
 | **`SFTP_PORT`** | `2022` |
 | **`SFTP_USER`** | `prmgvyt-109674.e22ee400` |
@@ -43,16 +47,18 @@ Cuộn xuống phần **Environment Variables**, thêm các biến sau:
 
 ---
 
-### ⚙️ Tính năng Quản lý Token & Lịch trình:
-- **Tự động Auto Gen Key:** Chạy ngầm định kỳ vào mỗi **Thứ 2, Thứ 4, Thứ 6 lúc 00:00 (Giờ Việt Nam)**:
-  1. Tự sinh API Key mới `aio_sec_...`
-  2. Ghi đè file `apitoken.js` trên HidenCloud qua SFTP
-  3. Gửi DM riêng cho Owner (`1262304052361035857`) với Embed báo cáo chi tiết!
-- **Lệnh Discord (Prefix `?`):**
-  - `?chat <nội dung>`: Trò chuyện trực tiếp với AI Qwen 2.5 trên Hugging Face (hoặc tag `@bot <tin nhắn>`).
-  - `?scan <url>`: Quét phân tích mối đe dọa website/URL qua AI Sandbox.
-  - `?testkey`: Chạy thử chu trình gen key, kiểm tra SFTP và gửi DM báo cáo (không làm thay đổi file `apitoken.js` chính).
-  - `?genkey`: Xoay key thật ngay lập tức, đẩy SFTP vào `apitoken.js` và gửi DM báo cáo.
-  - `?status`: Kiểm tra ping Discord, ping SFTP HidenCloud, giờ Việt Nam hiện tại và lần xoay key kế tiếp.
+### ⏰ Tính năng Tự Động Nhắc Nhở & Gia Hạn Dịch Vụ (Turso Cloud DB):
+- **Cơ sở dữ liệu đám mây Turso:** Lưu trữ danh sách dịch vụ HidenCloud (`h1`, `h2`, `h3`, `h4`, `h5`), OptikLink và Duolingo.
+- **Tự động quét & Gửi DM:** Khi một dịch vụ còn **dưới 1.5 ngày** trước khi hết hạn (Next Invoice Date), bot sẽ tự động gửi DM riêng cho Owner:
+  - Nút bấm `🔗 Mở trang quản lý`: Dẫn thẳng tới dashboard dịch vụ trên HidenCloud/OptikLink.
+  - Nút bấm `✅ Đã gia hạn (+7 ngày)`: Tự động cộng thêm +7 ngày vào database Turso và cập nhật trạng thái ngay trên Discord!
+- **Nhắc nhở học Duolingo:** Nhắc học hàng ngày lúc 20:00 VN để bảo vệ ngọn lửa Streak.
+- **Lệnh quản lý gia hạn:**
+  - `?reminder`: Xem bảng theo dõi tất cả dịch vụ, ngày hết hạn và menu dropdown gia hạn nhanh (+7 ngày).
+  - `?done <id>`: Xác nhận gia hạn nhanh cho dịch vụ (VD: `?done h2` ➜ cộng +7 ngày).
+  - `?duolingo`: Xem trạng thái học Duolingo và xác nhận Streak.
+  - `?checkreminders`: Chạy quét kiểm tra ngay lập tức và gửi DM nếu có dịch vụ sắp hết hạn.
+  - `?addservice`: Thêm hoặc chỉnh sửa dịch vụ mới vào database.
+  - `?help`: Bảng trợ giúp tự động nạp tất cả các lệnh hiện có của bot.
 
 
