@@ -40,9 +40,9 @@ turso = TursoDB()
 # ──────────────────────────────────────────────
 # CONFIGURATION
 # ──────────────────────────────────────────────
-DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", os.getenv("DISCORD_TOKEN", "MTU0MjkyMzkwODMyNjYyMTM5NQ.GAX6dL.8DNoJu5shJY3FBPTeKEzynBtQU0rvpTY3XOlzk")).strip()
+DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", os.getenv("DISCORD_TOKEN", "")).strip()
 OWNER_ID = int(os.getenv("NOTIFY_USER_ID", os.getenv("OWNER_ID", "1262304052361035857")))
-MASTER_KEY = os.getenv("MASTER_OWNER_KEY", os.getenv("AIO_RESET_TOKEN", "Iamprmgvyt2013@")).strip()
+MASTER_KEY = os.getenv("MASTER_OWNER_KEY", os.getenv("AIO_RESET_TOKEN", "")).strip()
 AIO_GATEWAY_URL = os.getenv("AIO_GATEWAY_URL", "https://aegix-claw.prmgvyt.xyz").rstrip("/")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "?").strip()
 PORT = int(os.getenv("PORT", 10000))
@@ -52,8 +52,8 @@ BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 # SFTP Credentials (HidenCloud)
 SFTP_HOST = os.getenv("SFTP_HOST", "theo.hidencloud.com")
 SFTP_PORT = int(os.getenv("SFTP_PORT", 2022))
-SFTP_USER = os.getenv("SFTP_USER", "prmgvyt-109674.e22ee400")
-SFTP_PASS = os.getenv("SFTP_PASS", "Iamprmgvyt2013@")
+SFTP_USER = os.getenv("SFTP_USER", "").strip()
+SFTP_PASS = os.getenv("SFTP_PASS", "").strip()
 SFTP_FILE = os.getenv("SFTP_FILE", "apitoken.js")
 
 # Schedule settings (Vietnam Time UTC+7)
@@ -68,8 +68,9 @@ last_daily_digest_date_vn = ""
 bot_start_time = time.time()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 HF_ROUTER_MODEL = os.getenv("HF_ROUTER_MODEL", "Qwen/Qwen2.5-72B-Instruct").strip()
-current_ai_model = os.getenv("DEFAULT_AI_MODEL", "Qwen/Qwen2.5-72B-Instruct").strip()
+current_ai_model = os.getenv("DEFAULT_AI_MODEL", "openai/gpt-oss-20b").strip()
 
 # ──────────────────────────────────────────────
 # TIME & SCHEDULER HELPERS (VIETNAM TIME UTC+7)
@@ -941,7 +942,7 @@ async def scan_cmd(ctx, *, url: str = None):
 # ── COMMAND: ?model ──
 @bot.command(name="model", aliases=["models", "setmodel"])
 async def model_cmd(ctx, *, model_name: str = None):
-    """Xem hoặc đổi mô hình AI đang sử dụng (GPT-OSS 120B, Llama 3.3 70B, Qwen)."""
+    """Xem hoặc đổi mô hình AI đang sử dụng (GPT-OSS 20B, GPT-OSS 120B, Qwen)."""
     global current_ai_model
     if not model_name:
         embed = discord.Embed(
@@ -950,32 +951,34 @@ async def model_cmd(ctx, *, model_name: str = None):
             color=0x6366F1
         )
         embed.add_field(
-            name="💡 Các Model Miễn Phí (Free Tier) đề xuất:",
+            name="💡 Các Model Nhanh & Miễn Phí Khuyên Dùng:",
             value=(
-                "• **`openai/gpt-oss-120b:free`**: Model 117B MoE từ OpenAI, suy luận logic mạnh mẽ\n"
-                "• **`meta-llama/llama-3.3-70b-instruct:free`**: Llama 3.3 70B, thông minh vượt trội, tiếng Việt mượt mà\n"
-                "• **`openrouter/free`**: Bộ định tuyến tự động chọn model free mạnh nhất\n"
-                "• **`deepseek/deepseek-r1:free`**: Siêu mô hình suy luận chuyên sâu\n"
-                "• **`qwen-local`**: Mô hình local chạy trên Hugging Face CPU Space"
+                "• **`openai/gpt-oss-20b`** *(Mặc định)*: Siêu nhanh (~500ms), 100% Free trên Groq, tối ưu cho Discord\n"
+                "• **`openai/gpt-oss-120b`**: Model 117B MoE thông minh vượt trội, suy luận chuyên sâu\n"
+                "• **`qwen/qwen3.6-27b`**: Model Qwen thế hệ mới, tiếng Việt mượt mà\n"
+                "• **`Qwen/Qwen2.5-72B-Instruct`**: Cụm GPU Native Hugging Face Router\n"
+                "• **`openrouter/free`**: Tự động định tuyến OpenRouter Free Tier (cần key)"
             ),
             inline=False
         )
         embed.add_field(
             name="📝 Cách đổi mô hình:",
-            value=f"`{BOT_PREFIX}model <tên_model>`\nVí dụ: `{BOT_PREFIX}model openai/gpt-oss-120b:free`\nHoặc: `{BOT_PREFIX}model meta-llama/llama-3.3-70b-instruct:free`",
+            value=f"`{BOT_PREFIX}model <tên_model>`\nVí dụ: `{BOT_PREFIX}model 20b` hoặc `{BOT_PREFIX}model 120b` hoặc `{BOT_PREFIX}model qwen`",
             inline=False
         )
         return await ctx.send(embed=embed)
 
     clean_model = model_name.strip()
-    if clean_model.lower() in ("default", "reset", "gpt", "gpt-oss", "120b", "gpt-oss-120b"):
-        current_ai_model = "openai/gpt-oss-120b:free"
-    elif clean_model.lower() in ("llama", "llama-70b", "llama-3.3", "70b"):
-        current_ai_model = "meta-llama/llama-3.3-70b-instruct:free"
-    elif clean_model.lower() in ("free", "auto", "router"):
+    if clean_model.lower() in ("default", "reset", "20b", "fast", "groq"):
+        current_ai_model = "openai/gpt-oss-20b"
+    elif clean_model.lower() in ("120b", "gpt-oss", "gpt-oss-120b"):
+        current_ai_model = "openai/gpt-oss-120b"
+    elif clean_model.lower() in ("qwen3", "qwen-27b", "27b"):
+        current_ai_model = "qwen/qwen3.6-27b"
+    elif clean_model.lower() in ("qwen", "72b", "hf", "huggingface"):
+        current_ai_model = "Qwen/Qwen2.5-72B-Instruct"
+    elif clean_model.lower() in ("free", "auto", "openrouter"):
         current_ai_model = "openrouter/free"
-    elif clean_model.lower() in ("local", "qwen", "cpu"):
-        current_ai_model = "qwen-local"
     else:
         current_ai_model = clean_model
 
@@ -984,15 +987,105 @@ async def model_cmd(ctx, *, model_name: str = None):
 # ── COMMAND: ?chat (AI MULTI-ENGINE INTEGRATION) ──
 @bot.command(name="chat", aliases=["ask", "ai", "qwen", "gpt"])
 async def chat_cmd(ctx, *, prompt: str = None):
-    """Trò chuyện trực tiếp với AI thông minh (GPT-OSS 120B / Llama 70B / Qwen)."""
+    """Trò chuyện trực tiếp với AI thông minh (GPT-OSS 20B / 120B / Qwen)."""
     if not prompt:
-        return await ctx.send(f"⚠️ Cách dùng: `{BOT_PREFIX}chat <câu hỏi/tin nhắn>`\nVí dụ: `{BOT_PREFIX}chat Xin chào, hãy giải thích cho tôi về lượng tử!`")
+        return await ctx.send(f"⚠️ Cách dùng: `{BOT_PREFIX}chat <câu hỏi/tin nhắn>`\nVí dụ: `{BOT_PREFIX}chat Xin chào, hãy giới thiệu về bạn!`")
 
     async with ctx.typing():
         t0 = time.monotonic()
 
-        # 1. Direct Hugging Face High-Performance GPU Router
-        if HF_TOKEN and ("Qwen" in current_ai_model or "72B" in current_ai_model or "default" in current_ai_model.lower()):
+        # 1. Direct Groq (Ultra-Fast ~500ms, 100% Free & Unblocked)
+        if GROQ_API_KEY and (not OPENROUTER_API_KEY or any(k in current_ai_model.lower() for k in ["gpt-oss", "20b", "120b", "groq", "qwen3"])):
+            try:
+                headers = {
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                    "User-Agent": BROWSER_UA
+                }
+                # Model selection on Groq
+                groq_model = "openai/gpt-oss-20b"
+                if "120b" in current_ai_model.lower():
+                    groq_model = "openai/gpt-oss-120b"
+                elif "qwen" in current_ai_model.lower() and ("3" in current_ai_model.lower() or "27b" in current_ai_model.lower()):
+                    groq_model = "qwen/qwen3.6-27b"
+                elif "gpt-oss" in current_ai_model.lower():
+                    groq_model = current_ai_model
+
+                payload = {
+                    "model": groq_model,
+                    "messages": [
+                        {"role": "system", "content": "You are AIClaw, a fast, helpful, and intelligent AI assistant for Discord. Answer clearly and comprehensively in Vietnamese if the user writes in Vietnamese."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 768,
+                    "temperature": 0.7
+                }
+                connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+                async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=20)) as session:
+                    async with session.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload) as resp:
+                        latency = round((time.monotonic() - t0) * 1000)
+                        if resp.status == 200:
+                            data = await resp.json()
+                            reply = data["choices"][0]["message"]["content"]
+                            footer = f"\n\n*(⚡ {latency} ms · {groq_model} on Groq Free)*"
+                            if len(reply) + len(footer) > 1950:
+                                chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
+                                for idx, chunk in enumerate(chunks):
+                                    if idx == len(chunks) - 1:
+                                        await ctx.reply(f"{chunk}{footer}")
+                                    else:
+                                        await ctx.reply(chunk)
+                            else:
+                                await ctx.reply(f"{reply}{footer}")
+                            return
+                        else:
+                            err_body = await resp.text()
+                            log.warning(f"Groq API returned HTTP {resp.status}: {err_body}")
+            except Exception as e:
+                log.warning(f"Direct Groq call error, falling back: {e}")
+
+        # 2. Direct OpenRouter query if OPENROUTER_API_KEY is configured
+        if OPENROUTER_API_KEY:
+            try:
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://aegixbot.hidenfree.com",
+                    "X-Title": "AI Claw Security"
+                }
+                payload = {
+                    "model": current_ai_model if ":" in current_ai_model or "/" in current_ai_model else "openrouter/free",
+                    "messages": [
+                        {"role": "system", "content": "You are AIClaw, a helpful AI assistant for Discord. Answer clearly in Vietnamese."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 768,
+                    "temperature": 0.7
+                }
+                connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+                async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=30)) as session:
+                    async with session.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload) as resp:
+                        latency = round((time.monotonic() - t0) * 1000)
+                        if resp.status == 200:
+                            data = await resp.json()
+                            reply = data["choices"][0]["message"]["content"]
+                            model_used = data.get("model", current_ai_model)
+                            footer = f"\n\n*(⚡ {latency} ms · {model_used} on OpenRouter)*"
+                            if len(reply) + len(footer) > 1950:
+                                chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
+                                for idx, chunk in enumerate(chunks):
+                                    if idx == len(chunks) - 1:
+                                        await ctx.reply(f"{chunk}{footer}")
+                                    else:
+                                        await ctx.reply(chunk)
+                            else:
+                                await ctx.reply(f"{reply}{footer}")
+                            return
+            except Exception as e:
+                log.warning(f"Direct OpenRouter call error: {e}")
+
+        # 3. Direct Hugging Face High-Performance GPU Router (Qwen 2.5 72B)
+        if HF_TOKEN:
             try:
                 headers = {
                     "Authorization": f"Bearer {HF_TOKEN}",
@@ -1001,7 +1094,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
                 payload = {
                     "model": "Qwen/Qwen2.5-72B-Instruct",
                     "messages": [
-                        {"role": "system", "content": "You are AIClaw, a highly intelligent and helpful AI assistant powered by Hugging Face GPU Cluster and Qwen 2.5 72B. Answer clearly and informatively in Vietnamese if user writes in Vietnamese."},
+                        {"role": "system", "content": "You are AIClaw, a helpful Discord AI assistant. Answer clearly in Vietnamese."},
                         {"role": "user", "content": prompt}
                     ],
                     "max_tokens": 768,
@@ -1014,7 +1107,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
                         if resp.status == 200:
                             data = await resp.json()
                             reply = data["choices"][0]["message"]["content"]
-                            footer = f"\n\n*(⚡ {latency} ms · Qwen 2.5 72B on Hugging Face GPU)*"
+                            footer = f"\n\n*(⚡ {latency} ms · Qwen 2.5 72B on HF GPU)*"
                             if len(reply) + len(footer) > 1950:
                                 chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
                                 for idx, chunk in enumerate(chunks):
@@ -1026,92 +1119,9 @@ async def chat_cmd(ctx, *, prompt: str = None):
                                 await ctx.reply(f"{reply}{footer}")
                             return
             except Exception as e:
-                log.warning(f"Direct HF Router call error, attempting fallback: {e}")
+                log.warning(f"Direct HF Router call error: {e}")
 
-        # 2. Direct OpenRouter query if OPENROUTER_API_KEY is configured directly on bot
-        if OPENROUTER_API_KEY:
-            try:
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://aegix-claw.prmgvyt.xyz",
-                    "X-Title": "AI Claw Security"
-                }
-                payload = {
-                    "model": current_ai_model,
-                    "messages": [
-                        {"role": "system", "content": "You are AIClaw, a highly intelligent and helpful AI assistant. Answer clearly and comprehensively in Vietnamese if the user writes in Vietnamese."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "max_tokens": 768,
-                    "temperature": 0.7
-                }
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=40)) as session:
-                    async with session.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload) as resp:
-                        latency = round((time.monotonic() - t0) * 1000)
-                        if resp.status == 200:
-                            data = await resp.json()
-                            reply = data["choices"][0]["message"]["content"]
-                            model_used = data.get("model", current_ai_model)
-                            footer = f"\n\n*(⚡ {latency} ms · {model_used})*"
-                            if len(reply) + len(footer) > 1950:
-                                chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
-                                for idx, chunk in enumerate(chunks):
-                                    if idx == len(chunks) - 1:
-                                        await ctx.reply(f"{chunk}{footer}")
-                                    else:
-                                        await ctx.reply(chunk)
-                            else:
-                                await ctx.reply(f"{reply}{footer}")
-                            return
-            except Exception as e:
-                log.warning(f"Direct OpenRouter call error, falling back: {e}")
-
-        # 2. Fallback to Hugging Face AI Gateway
-        try:
-            headers = {
-                "User-Agent": BROWSER_UA,
-                "X-API-Key": MASTER_KEY,
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "messages": [
-                    {"role": "system", "content": "You are AIClaw, a highly intelligent and helpful AI assistant. Answer clearly and informatively."},
-                    {"role": "user", "content": prompt}
-                ],
-                "author_id": str(ctx.author.id),
-                "guild_id": str(ctx.guild.id if ctx.guild else ""),
-                "max_tokens": 512,
-                "temperature": 0.7,
-                "model": current_ai_model,
-                "openrouter_api_key": OPENROUTER_API_KEY or None,
-                "hf_token": HF_TOKEN or None
-            }
-
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=45)) as session:
-                async with session.post(f"{AIO_GATEWAY_URL}/api/v1/chat", headers=headers, json=payload) as resp:
-                    latency = round((time.monotonic() - t0) * 1000)
-                    if resp.status == 200:
-                        data = await resp.json()
-                        reply = data.get("response", "Không nhận được phản hồi từ AI.")
-                        model_name = data.get("model", current_ai_model)
-
-                        footer = f"\n\n*(⚡ {latency} ms · {model_name})*"
-                        if len(reply) + len(footer) > 1950:
-                            chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
-                            for idx, chunk in enumerate(chunks):
-                                if idx == len(chunks) - 1:
-                                    await ctx.reply(f"{chunk}{footer}")
-                                else:
-                                    await ctx.reply(chunk)
-                        else:
-                            await ctx.reply(f"{reply}{footer}")
-                    else:
-                        await ctx.reply(f"⚠️ Hugging Face AI Gateway báo lỗi HTTP {resp.status} (Ping: {latency} ms).")
-        except asyncio.TimeoutError:
-            await ctx.reply("⏱️ Yêu cầu tới AI Gateway bị quá thời gian (Timeout).")
-        except Exception as e:
-            await ctx.reply(f"❌ Không thể kết nối tới AI Gateway: `{e}`")
+        await ctx.reply("⚠️ Hiện tại không thể kết nối tới các dịch vụ AI trực tiếp (Groq / OpenRouter / Hugging Face). Vui lòng thử lại sau!")
 
 # ──────────────────────────────────────────────
 # AUTOMOD REAL-TIME INSPECTION

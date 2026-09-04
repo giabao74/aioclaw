@@ -14,8 +14,8 @@ VN_TZ = timezone(timedelta(hours=7))
 
 class TursoDB:
     def __init__(self, url: str = None, token: str = None):
-        raw_url = url or os.getenv("TURSO_DATABASE_URL", "libsql://ai-claw-iamprmgvyt.aws-ap-northeast-1.turso.io")
-        self.token = token or os.getenv("TURSO_AUTH_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODg1MTE3NDIsImlkIjoiMDFhMDZiOWItNTEwMS03ZWMxLWJkY2MtNDkyZWUyODk4NGVmIiwia2lkIjoicGtZTlk2RHcxVV95VjZuVEw5N0Z5Q1lQTEEtUXhCU3BidlZpUEFpWWFFRSIsInJpZCI6Ijc0ZDQzNmJkLTkyZjgtNGVlMC1hNzcxLTQwZmNjMGM4ODA5MyJ9.S6_oqUlJGwtdZ3raMszbB9nTHNhL1rn9lT3a0OchMMz0XOJTyXAcWpc-WPUEQWkXckbop21k0Z-g581QKU45DQ")
+        raw_url = url or os.getenv("TURSO_DATABASE_URL", "")
+        self.token = token or os.getenv("TURSO_AUTH_TOKEN", "")
         
         clean_url = raw_url.replace("libsql://", "https://").rstrip("/")
         if not clean_url.endswith("/v2/pipeline"):
