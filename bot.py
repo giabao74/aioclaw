@@ -47,6 +47,7 @@ AIO_GATEWAY_URL = os.getenv("AIO_GATEWAY_URL", "https://aegix-claw.prmgvyt.xyz")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "?").strip()
 PORT = int(os.getenv("PORT", 10000))
 REMINDER_CHANNEL_ID = int(os.getenv("REMINDER_CHANNEL_ID", "1494907926815445023"))
+BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # SFTP Credentials (HidenCloud)
 SFTP_HOST = os.getenv("SFTP_HOST", "theo.hidencloud.com")
@@ -175,8 +176,9 @@ async def execute_unified_rotation(is_test: bool = False, trigger_source: str = 
     if not is_test:
         try:
             payload = {"reset_token": MASTER_KEY, "new_key": new_token, "reason": f"Auto Rotation ({trigger_source})"}
+            headers = {"User-Agent": BROWSER_UA, "Content-Type": "application/json"}
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-                async with session.post(f"{AIO_GATEWAY_URL}/api/v1/reset-token", json=payload) as resp:
+                async with session.post(f"{AIO_GATEWAY_URL}/api/v1/reset-token", headers=headers, json=payload) as resp:
                     if resp.status == 200:
                         hf_ok = True
                         hf_msg = "Đã đồng bộ vào bộ nhớ Hugging Face Space"
@@ -857,8 +859,9 @@ async def status_cmd(ctx):
     gw_status = "🔴 Offline"
     try:
         t0 = time.monotonic()
+        headers = {"User-Agent": BROWSER_UA}
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4)) as session:
-            async with session.get(f"{AIO_GATEWAY_URL}/") as resp:
+            async with session.get(f"{AIO_GATEWAY_URL}/", headers=headers) as resp:
                 gw_ping = round((time.monotonic() - t0) * 1000)
                 if resp.status == 200:
                     gw_status = f"🟢 Online ({gw_ping} ms)"
@@ -908,7 +911,11 @@ async def scan_cmd(ctx, *, url: str = None):
 
     msg = await ctx.send(f"🔍 Đang chuyển URL `{clean_url}` tới Cụm AI Sandbox trên Hugging Face để phân tích...")
     try:
-        headers = {"X-API-Key": MASTER_KEY, "Content-Type": "application/json"}
+        headers = {
+            "User-Agent": BROWSER_UA,
+            "X-API-Key": MASTER_KEY,
+            "Content-Type": "application/json"
+        }
         payload = {"url": clean_url}
 
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
@@ -1062,7 +1069,11 @@ async def chat_cmd(ctx, *, prompt: str = None):
 
         # 2. Fallback to Hugging Face AI Gateway
         try:
-            headers = {"X-API-Key": MASTER_KEY, "Content-Type": "application/json"}
+            headers = {
+                "User-Agent": BROWSER_UA,
+                "X-API-Key": MASTER_KEY,
+                "Content-Type": "application/json"
+            }
             payload = {
                 "messages": [
                     {"role": "system", "content": "You are AIClaw, a highly intelligent and helpful AI assistant. Answer clearly and informatively."},
@@ -1124,7 +1135,11 @@ async def on_message(message: discord.Message):
     content = message.content.strip()
     if any(k in content.lower() for k in ["http://", "https://", "discord.gift", "nitro", "steamcommunity", "airdrop"]):
         try:
-            headers = {"X-API-Key": MASTER_KEY, "Content-Type": "application/json"}
+            headers = {
+                "User-Agent": BROWSER_UA,
+                "X-API-Key": MASTER_KEY,
+                "Content-Type": "application/json"
+            }
             payload = {"content": content, "author_id": str(message.author.id), "guild_id": str(message.guild.id)}
 
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
