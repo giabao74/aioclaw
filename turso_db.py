@@ -96,6 +96,13 @@ class TursoDB:
         except Exception:
             pass
 
+        await self.execute("""
+            CREATE TABLE IF NOT EXISTS bot_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+
         existing = await self.get_all_reminders()
         existing_ids = {r["id"] for r in existing}
 
@@ -154,3 +161,10 @@ class TursoDB:
 
         await self.execute("UPDATE reminders SET next_invoice = ?, last_notified = '' WHERE id = ?", [new_str, reminder_id.lower()])
         return new_dt
+
+    async def get_config(self, key: str) -> Optional[str]:
+        rows = await self.execute("SELECT value FROM bot_config WHERE key = ?", [key])
+        return rows[0]["value"] if rows else None
+
+    async def set_config(self, key: str, value: str):
+        await self.execute("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)", [key, str(value)])

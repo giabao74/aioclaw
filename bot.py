@@ -46,6 +46,7 @@ MASTER_KEY = os.getenv("MASTER_OWNER_KEY", os.getenv("AIO_RESET_TOKEN", "Iamprmg
 AIO_GATEWAY_URL = os.getenv("AIO_GATEWAY_URL", "https://aegix-claw.prmgvyt.xyz").rstrip("/")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "?").strip()
 PORT = int(os.getenv("PORT", 10000))
+REMINDER_CHANNEL_ID = int(os.getenv("REMINDER_CHANNEL_ID", "1494907926815445023"))
 
 # SFTP Credentials (HidenCloud)
 SFTP_HOST = os.getenv("SFTP_HOST", "theo.hidencloud.com")
@@ -324,6 +325,9 @@ async def on_ready():
     if not auto_reminder_loop.is_running():
         auto_reminder_loop.start()
 
+    # Initialize/Update Single Channel Reminder Message (Channel ID: 1494907926815445023)
+    asyncio.create_task(update_channel_reminder_message())
+
     # Startup DM to Owner
     try:
         owner = bot.get_user(OWNER_ID) or await bot.fetch_user(OWNER_ID)
@@ -393,6 +397,10 @@ class RenewServiceView(discord.ui.View):
                 value=f"Đã cộng **+7 ngày** vào Turso DB!\n📅 **Hạn thanh toán mới:** `{new_date_str}`",
                 inline=False
             )
+            try:
+                await update_channel_reminder_message()
+            except Exception:
+                pass
             await interaction.message.edit(embed=embed, view=self)
             await interaction.followup.send(f"✅ Đã gia hạn thành công dịch vụ **{self.service_name}**! Hạn mới: **`{new_date_str}`**", ephemeral=True)
 
@@ -441,6 +449,10 @@ class DuolingoView(discord.ui.View):
             value="🎉 Chúc mừng bạn đã hoàn thành bài học Duolingo hôm nay! Nhắc nhở kế tiếp: Ngày mai lúc 20:00.",
             inline=False
         )
+        try:
+            await update_channel_reminder_message()
+        except Exception:
+            pass
         await interaction.message.edit(embed=embed, view=self)
         await interaction.followup.send("🎉 Tuyệt vời! Bạn đã giữ vững ngọn lửa Streak hôm nay!", ephemeral=True)
 
@@ -449,7 +461,10 @@ def build_reminders_embed(items: List[Dict[str, Any]]) -> discord.Embed:
     now_vn = datetime.now(VN_TZ).replace(tzinfo=None)
     embed = discord.Embed(
         title="🔔 AIClaw — Bảng Theo Dõi Gia Hạn & Lịch Trình (Turso DB)",
-        description="Danh sách dịch vụ HidenCloud, OptikLink & Duolingo được lưu trữ trên **Turso Cloud Database**:\n*(Dịch vụ còn dưới 1.5 ngày sẽ tự động gửi DM kèm nút gia hạn)*",
+        description=(
+            "Quản lý danh sách dịch vụ HidenCloud, OptikLink & Duolingo:\n"
+            "*(Tin nhắn được tự động cập nhật & chỉnh sửa trực tiếp • Không gửi trùng lặp)*"
+        ),
         color=0x6366F1,
         timestamp=discord.utils.utcnow()
     )
@@ -473,9 +488,11 @@ def build_reminders_embed(items: List[Dict[str, Any]]) -> discord.Embed:
             diff = (target_dt - now_vn).total_seconds()
             days_left = diff / 86400
             if diff <= 0:
-                status_icon = "🚨 **[QUÁ HẠN]**"
+                status_icon = "🚨 **[ĐÃ QUÁ HẠN]**"
             elif diff <= 1.5 * 86400:
-                status_icon = "⚠️ **[CẦN GIA HẠN NGAY (<1.5 ngày)]**"
+                hours_left = max(0, int(diff // 3600))
+                mins_left = max(0, int((diff % 3600) // 60))
+                status_icon = f"⚠️ **[CẦN GIA HẠN NGAY (còn ~{hours_left}h {mins_left}m)]**"
             else:
                 status_icon = f"🟢 Còn ~{int(days_left)} ngày"
             date_display = target_dt.strftime("%d %b %Y")
@@ -496,7 +513,7 @@ def build_reminders_embed(items: List[Dict[str, Any]]) -> discord.Embed:
                 inline=False
             )
 
-    embed.set_footer(text=f"Turso DB: libsql://ai-claw-iamprmgvyt... • Prefix: {BOT_PREFIX}")
+    embed.set_footer(text=f"Turso DB: libsql://ai-claw-iamprmgvyt... • Tự động cập nhật • Cập nhật lúc {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
     return embed
 
 
@@ -519,154 +536,173 @@ class ServiceSelectDropdown(discord.ui.Select):
         if interaction.user.id != OWNER_ID:
             return await interaction.response.send_message("❌ Chỉ Owner mới có thể thực hiện thao tác này!", ephemeral=True)
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         chosen_id = self.values[0]
         new_dt = await self.db.add_days_to_reminder(chosen_id, 7)
         new_date_str = new_dt.strftime("%d %b %Y") if new_dt else "N/A"
         
-        items = await self.db.get_all_reminders()
-        embed = build_reminders_embed(items)
-        await interaction.message.edit(embed=embed)
+        await update_channel_reminder_message()
         await interaction.followup.send(f"✅ Đã cộng **+7 ngày** cho dịch vụ **{chosen_id.upper()}**! Hạn mới: **`{new_date_str}`**", ephemeral=True)
 
 
 class DashboardView(discord.ui.View):
     def __init__(self, services: List[Dict[str, Any]], db: TursoDB):
-        super().__init__(timeout=180)
+        super().__init__(timeout=None)
         self.db = db
-        self.add_item(ServiceSelectDropdown(services=services, db=db))
+        self.services = services
+
+        # 1. Dropdown chọn dịch vụ để gia hạn
+        service_options = [s for s in services if s.get("category") != "duolingo"]
+        if service_options:
+            self.add_item(ServiceSelectDropdown(services=services, db=db))
+
+        # 2. Quick buttons cho dịch vụ đang cần gia hạn (< 1.5 ngày)
+        now_vn = datetime.now(VN_TZ).replace(tzinfo=None)
+        urgent = []
+        for s in service_options:
+            t_dt = None
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d %b %Y", "%d %b %Y %H:%M:%S"):
+                try:
+                    t_dt = datetime.strptime(s["next_invoice"].strip(), fmt)
+                    break
+                except Exception:
+                    pass
+            if t_dt:
+                diff = (t_dt - now_vn).total_seconds()
+                if diff <= 1.5 * 86400:
+                    urgent.append(s)
+
+        for idx, urg in enumerate(urgent[:2]):
+            row_idx = 1 + idx
+            self.add_item(discord.ui.Button(
+                label=f"🔗 Mở {urg['name'][:12]}",
+                url=urg["url"],
+                style=discord.ButtonStyle.link,
+                row=row_idx
+            ))
+            
+            renew_btn = discord.ui.Button(
+                label="✅ Đã gia hạn",
+                style=discord.ButtonStyle.success,
+                custom_id=f"dash_renew_{urg['id']}",
+                row=row_idx
+            )
+            
+            def make_callback(svc_id, svc_name):
+                async def btn_callback(interaction: discord.Interaction):
+                    if interaction.user.id != OWNER_ID:
+                        return await interaction.response.send_message("❌ Chỉ Owner mới có thể thực hiện thao tác này!", ephemeral=True)
+                    await interaction.response.defer(ephemeral=True)
+                    new_dt = await db.add_days_to_reminder(svc_id, 7)
+                    new_str = new_dt.strftime("%d %b %Y") if new_dt else "N/A"
+                    await update_channel_reminder_message()
+                    await interaction.followup.send(f"✅ Đã gia hạn thành công dịch vụ **{svc_name}**! Hạn mới: **`{new_str}`** (+7 ngày).", ephemeral=True)
+                return btn_callback
+
+            renew_btn.callback = make_callback(urg["id"], urg["name"])
+            self.add_item(renew_btn)
+
+        # 3. Hàng Duolingo
+        duo_item = next((s for s in services if s.get("category") == "duolingo"), None)
+        duo_row = min(4, 1 + len(urgent[:2]))
         self.add_item(discord.ui.Button(
             label="🦉 Mở Duolingo",
-            url="https://www.duolingo.com",
+            url=duo_item["url"] if duo_item else "https://www.duolingo.com",
             style=discord.ButtonStyle.link,
-            row=1
+            row=duo_row
         ))
+        
+        duo_btn = discord.ui.Button(
+            label="🔥 Đã học xong hôm nay",
+            style=discord.ButtonStyle.primary,
+            custom_id="dash_duo_done",
+            row=duo_row
+        )
+        
+        async def duo_callback(interaction: discord.Interaction):
+            if interaction.user.id != OWNER_ID:
+                return await interaction.response.send_message("❌ Chỉ Owner mới có thể xác nhận Streak!", ephemeral=True)
+            await interaction.response.defer(ephemeral=True)
+            now_dt = datetime.now(VN_TZ)
+            tomorrow_str = (now_dt + timedelta(days=1)).strftime("%Y-%m-%d 20:00:00")
+            await db.upsert_reminder("duolingo", "Duolingo Học Tiếng", "https://www.duolingo.com", tomorrow_str, category="duolingo")
+            await db.update_last_notified("duolingo", now_dt.strftime("%Y-%m-%d %H:%M:%S"))
+            await update_channel_reminder_message()
+            await interaction.followup.send("🎉 Tuyệt vời! Bạn đã giữ vững ngọn lửa Streak hôm nay!", ephemeral=True)
+
+        duo_btn.callback = duo_callback
+        self.add_item(duo_btn)
+
+
+async def update_channel_reminder_message():
+    """
+    Quản lý và cập nhật DUY NHẤT 1 tin nhắn trong kênh REMINDER_CHANNEL_ID (1494907926815445023).
+    Chỉ thực hiện CHỈNH SỬA (edit), không gửi nhiều tin nhắn để tránh spam / trùng lặp.
+    Message ID được lưu cố định trong Turso DB (bảng bot_config: 'channel_reminder_message_id').
+    """
+    try:
+        channel = bot.get_channel(REMINDER_CHANNEL_ID)
+        if not channel:
+            try:
+                channel = await bot.fetch_channel(REMINDER_CHANNEL_ID)
+            except Exception as e:
+                log.error(f"Cannot access reminder channel {REMINDER_CHANNEL_ID}: {e}")
+                return
+
+        items = await turso.get_all_reminders()
+        embed = build_reminders_embed(items)
+        view = DashboardView(services=items, db=turso)
+
+        now_vn = datetime.now(VN_TZ).replace(tzinfo=None)
+        urgent_services = []
+        for it in items:
+            if it.get("category") == "duolingo":
+                continue
+            t_dt = None
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d %b %Y", "%d %b %Y %H:%M:%S"):
+                try:
+                    t_dt = datetime.strptime(it["next_invoice"].strip(), fmt)
+                    break
+                except Exception:
+                    pass
+            if t_dt:
+                diff = (t_dt - now_vn).total_seconds()
+                if diff <= 1.5 * 86400:
+                    urgent_services.append(it["name"])
+
+        if urgent_services:
+            content = f"<@{OWNER_ID}> ⚠️ **Đến giờ check và gia hạn dịch vụ rồi nha!** 🔥 *(Cần gia hạn: {', '.join(urgent_services)})*"
+        else:
+            content = f"<@{OWNER_ID}> 🔔 **Bảng theo dõi dịch vụ & gia hạn tự động (Turso DB)**"
+
+        saved_msg_id = await turso.get_config("channel_reminder_message_id")
+        msg = None
+        if saved_msg_id:
+            try:
+                msg = await channel.fetch_message(int(saved_msg_id))
+            except discord.NotFound:
+                log.info("Reminder message not found on Discord (deleted). Creating a new one...")
+                msg = None
+            except Exception as e:
+                log.warning(f"Error fetching reminder message {saved_msg_id}: {e}")
+                msg = None
+
+        if msg:
+            await msg.edit(content=content, embed=embed, view=view)
+            log.info(f"Edited existing reminder message {msg.id} in channel {REMINDER_CHANNEL_ID}")
+        else:
+            new_msg = await channel.send(content=content, embed=embed, view=view)
+            await turso.set_config("channel_reminder_message_id", str(new_msg.id))
+            log.info(f"Created initial reminder message {new_msg.id} in channel {REMINDER_CHANNEL_ID} and saved to Turso DB")
+    except Exception as e:
+        log.error(f"Error in update_channel_reminder_message: {e}", exc_info=True)
 
 
 @tasks.loop(minutes=15)
 async def auto_reminder_loop():
-    """Tự động quét các dịch vụ trên Turso DB và nhắc nhở gia hạn mỗi ngày (everyday)."""
-    global last_daily_digest_date_vn
+    """Tự động quét các dịch vụ trên Turso DB và cập nhật tin nhắn duy nhất trong channel reminder mỗi 15 phút."""
     try:
-        now_vn = datetime.now(VN_TZ).replace(tzinfo=None)
-        today_str = now_vn.strftime("%Y-%m-%d")
-        items = await turso.get_all_reminders()
-        owner = bot.get_user(OWNER_ID) or await bot.fetch_user(OWNER_ID)
-        if not owner:
-            return
-
-        # ── 1. NHẮC NHỞ TỔNG HỢP HÀNG NGÀY (DAILY REMINDER LÚC 10:00 SÁNG) ──
-        if now_vn.hour >= 10 and last_daily_digest_date_vn != today_str:
-            last_daily_digest_date_vn = today_str
-            embed = discord.Embed(
-                title="🔔 Service Renewal Reminder",
-                description="Đã đến **10h00 sáng**! Đây là danh sách các dịch vụ cần kiểm tra và gia hạn:",
-                color=0x6366F1,
-                timestamp=discord.utils.utcnow()
-            )
-            for it in items:
-                if it.get("category") == "duolingo":
-                    continue
-                t_dt = None
-                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-                    try:
-                        t_dt = datetime.strptime(it["next_invoice"].strip(), fmt)
-                        break
-                    except Exception:
-                        pass
-                date_str = t_dt.strftime("%d %b %Y") if t_dt else it["next_invoice"]
-                embed.add_field(
-                    name=f"🔗 {it['name']}",
-                    value=f"• Next Invoice Date: `{date_str}`\n• Quản lý: {it['url']}",
-                    inline=False
-                )
-            embed.set_footer(text="Hệ thống nhắc nhở tự động • Auto Reminder • Today at 10:00")
-            view = DashboardView(services=items, db=turso)
-            await owner.send(content=f"<@{OWNER_ID}> Đến giờ check và gia hạn dịch vụ rồi nha! 🔥", embed=embed, view=view)
-            log.info("Sent daily 10:00 AM renewal reminder digest to Owner.")
-
-        # ── 2. NHẮC NHỞ TỪNG DỊCH VỤ DƯỚI 1.5 NGÀY (AUTO REMIND EVERYDAY) ──
-        for item in items:
-            s_id = item["id"]
-            s_name = item["name"]
-            s_url = item["url"]
-            s_date_str = item["next_invoice"]
-            last_notified = item.get("last_notified", "")
-            category = item.get("category", "service")
-
-            target_dt = None
-            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d %b %Y", "%d %b %Y %H:%M:%S"):
-                try:
-                    target_dt = datetime.strptime(s_date_str.strip(), fmt)
-                    break
-                except Exception:
-                    pass
-
-            if not target_dt:
-                continue
-
-            diff = (target_dt - now_vn).total_seconds()
-            
-            # Category 1: Services (HiddenCloud, OptikLink, etc.)
-            if category == "service":
-                # Điều kiện: Còn dưới 1.5 ngày và hôm nay chưa nhắc
-                if diff <= 1.5 * 86400:
-                    should_notify = (not last_notified or not last_notified.startswith(today_str))
-
-                    if should_notify:
-                        if diff > 0:
-                            hours_left = int(diff // 3600)
-                            mins_left = int((diff % 3600) // 60)
-                            time_left_str = f"⏳ Còn **{hours_left} giờ {mins_left} phút**"
-                            embed_color = 0xF59E0B if hours_left > 12 else 0xEF4444
-                        else:
-                            time_left_str = f"🚨 **ĐÃ QUÁ HẠN!** (Hết hạn từ: `{target_dt.strftime('%d %b %Y')}`)"
-                            embed_color = 0x991B1B
-
-                        embed = discord.Embed(
-                            title=f"🔔 [Auto Reminder] Nhắc nhở gia hạn dịch vụ: {s_name}",
-                            description=(
-                                f"Dịch vụ **{s_name}** đang sắp đến hạn thanh toán / gia hạn!\n\n"
-                                f"📅 **Hạn kế tiếp (Next Invoice):** `{target_dt.strftime('%d %b %Y')}`\n"
-                                f"{time_left_str}\n\n"
-                                f"💡 *Bấm nút **Mở trang** để kiểm tra gia hạn, sau đó bấm **Đã gia hạn** để hệ thống tự động cập nhật vào database!*"
-                            ),
-                            color=embed_color,
-                            timestamp=discord.utils.utcnow()
-                        )
-                        embed.set_footer(text="Hệ thống nhắc nhở tự động mỗi ngày • AIClaw Turso DB")
-
-                        view = RenewServiceView(service_id=s_id, service_name=s_name, service_url=s_url, db=turso)
-                        await owner.send(content=f"<@{OWNER_ID}> ⚠️ Đến giờ check và gia hạn dịch vụ rồi nha! 🔥", embed=embed, view=view)
-                        await turso.update_last_notified(s_id, now_vn.strftime("%Y-%m-%d %H:%M:%S"))
-                        log.info(f"Sent everyday renewal reminder for {s_name} to Owner.")
-
-            # 2. Duolingo Daily Reminder
-            elif category == "duolingo":
-                is_evening = (now_vn.hour >= 19)
-                should_notify_duo = False
-                if is_evening:
-                    if not last_notified or not last_notified.startswith(now_vn.strftime("%Y-%m-%d")):
-                        should_notify_duo = True
-
-                if should_notify_duo:
-                    embed = discord.Embed(
-                        title="🦉 [Duolingo Reminder] Đến giờ học Duolingo rồi!",
-                        description=(
-                            "🔥 **Đừng để vụt mất ngọn lửa Streak hôm nay nhé!**\n\n"
-                            "Chỉ cần dành 5 phút hoàn thành 1 bài học để bảo vệ chuỗi ngày học liên tục của bạn!\n\n"
-                            "Bấm **Mở Duolingo** để học ngay, sau khi học xong bấm **Đã học xong hôm nay** nhé!"
-                        ),
-                        color=0x58CC02,
-                        timestamp=discord.utils.utcnow()
-                    )
-                    embed.set_thumbnail(url="https://d35aaqx5ub9pw2.cloudfront.net/images/owls/owl-happy.png")
-                    embed.set_footer(text="Duolingo Streak Keeper • AIClaw Turso DB")
-                    view = DuolingoView(db=turso)
-                    await owner.send(content=f"<@{OWNER_ID}> 🦉 Quác quác! Đã đến giờ học bài Duolingo rồi!", embed=embed, view=view)
-                    await turso.update_last_notified("duolingo", now_vn.strftime("%Y-%m-%d %H:%M:%S"))
-                    log.info("Sent Duolingo reminder to Owner.")
-
+        await update_channel_reminder_message()
     except Exception as e:
         log.error(f"Error in auto_reminder_loop: {e}", exc_info=True)
 
@@ -697,13 +733,11 @@ async def help_cmd(ctx):
 # ── COMMAND: ?reminder ──
 @bot.command(name="reminder", aliases=["remind", "services", "renew"])
 async def reminder_cmd(ctx):
-    """Xem danh sách dịch vụ gia hạn, ngày hết hạn và menu gia hạn (+7 ngày)."""
-    items = await turso.get_all_reminders()
-    if not items:
-        return await ctx.send("Chưa có dịch vụ nào trong cơ sở dữ liệu Turso.")
-    embed = build_reminders_embed(items)
-    view = DashboardView(services=items, db=turso)
-    await ctx.send(embed=embed, view=view)
+    """Xem và cập nhật tin nhắn theo dõi dịch vụ trong channel reminder."""
+    await update_channel_reminder_message()
+    saved_msg_id = await turso.get_config("channel_reminder_message_id")
+    jump_link = f"https://discord.com/channels/{ctx.guild.id if ctx.guild else '@me'}/{REMINDER_CHANNEL_ID}/{saved_msg_id}" if saved_msg_id else f"<#{REMINDER_CHANNEL_ID}>"
+    await ctx.send(f"🔔 Bảng nhắc nhở gia hạn duy nhất đang được hiển thị và cập nhật tại: {jump_link} (Kênh <#{REMINDER_CHANNEL_ID}>).")
 
 
 # ── COMMAND: ?done ──
@@ -718,31 +752,32 @@ async def done_cmd(ctx, service_id: str = None):
     new_dt = await turso.add_days_to_reminder(service_id.lower().strip(), 7)
     if not new_dt:
         return await ctx.send(f"❌ Không tìm thấy dịch vụ nào có ID là `{service_id}`. Dùng `{BOT_PREFIX}reminder` để xem danh sách.")
-    await ctx.send(f"✅ Đã gia hạn thành công dịch vụ **`{service_id.upper()}`**! Next Invoice Date mới: **`{new_dt.strftime('%d %b %Y')}`** (+7 ngày).")
+    
+    await update_channel_reminder_message()
+    await ctx.send(f"✅ Đã gia hạn thành công dịch vụ **`{service_id.upper()}`**! Next Invoice Date mới: **`{new_dt.strftime('%d %b %Y')}`** (+7 ngày).\nTin nhắn trong kênh <#{REMINDER_CHANNEL_ID}> đã được tự động cập nhật!")
 
 
 # ── COMMAND: ?duolingo ──
 @bot.command(name="duolingo", aliases=["duo", "streak"])
 async def duolingo_cmd(ctx):
     """Mở bảng nhắc nhở học Duolingo và xác nhận Streak hàng ngày."""
-    embed = discord.Embed(
-        title="🦉 Duolingo Daily Streak Reminder",
-        description="Học mỗi ngày để giữ lửa Streak không bị tắt! Bấm nút bên dưới để mở app hoặc xác nhận đã học xong hôm nay.",
-        color=0x58CC02
-    )
-    view = DuolingoView(db=turso)
-    await ctx.send(embed=embed, view=view)
+    now_dt = datetime.now(VN_TZ)
+    tomorrow_str = (now_dt + timedelta(days=1)).strftime("%Y-%m-%d 20:00:00")
+    await turso.upsert_reminder("duolingo", "Duolingo Học Tiếng", "https://www.duolingo.com", tomorrow_str, category="duolingo")
+    await turso.update_last_notified("duolingo", now_dt.strftime("%Y-%m-%d %H:%M:%S"))
+    await update_channel_reminder_message()
+    await ctx.send(f"🔥 Đã ghi nhận Streak hôm nay thành công! Lịch nhắc Duolingo kế tiếp: Ngày mai lúc 20:00.\nBảng theo dõi tại <#{REMINDER_CHANNEL_ID}> đã được cập nhật.")
 
 
 # ── COMMAND: ?checkreminders ──
 @bot.command(name="checkreminders", aliases=["testreminder", "runreminder"])
 async def check_reminders_cmd(ctx):
-    """Kiểm tra ngay lập tức các dịch vụ và gửi DM nhắc nhở nếu có dịch vụ < 1.5 ngày."""
+    """Kiểm tra ngay lập tức các dịch vụ và cập nhật tin nhắn duy nhất trong channel reminder."""
     if ctx.author.id != OWNER_ID:
         return await ctx.send("❌ Chỉ Owner mới có quyền chạy kiểm tra.")
-    msg = await ctx.send("🔍 Đang quét toàn bộ dịch vụ trong Turso DB...")
-    await auto_reminder_loop()
-    await msg.edit(content="✅ Đã hoàn tất quét và gửi DM nếu có dịch vụ dưới 1.5 ngày!")
+    msg = await ctx.send(f"🔍 Đang quét dịch vụ trong Turso DB và cập nhật kênh <#{REMINDER_CHANNEL_ID}>...")
+    await update_channel_reminder_message()
+    await msg.edit(content=f"✅ Đã cập nhật thành công tin nhắn duy nhất trong kênh <#{REMINDER_CHANNEL_ID}>!")
 
 
 # ── COMMAND: ?addservice ──
@@ -758,7 +793,8 @@ async def addservice_cmd(ctx, s_id: str = None, date_str: str = None, *, details
     name = parts[0]
     url = parts[1] if len(parts) > 1 else "https://dash.hidencloud.com"
     await turso.upsert_reminder(s_id.lower().strip(), name, url, f"{date_str.strip()} 00:00:00")
-    await ctx.send(f"✅ Đã thêm/cập nhật dịch vụ **`{s_id.upper()}`** ({name}) với hạn thanh toán: `{date_str}`!")
+    await update_channel_reminder_message()
+    await ctx.send(f"✅ Đã thêm/cập nhật dịch vụ **`{s_id.upper()}`** ({name}) với hạn thanh toán: `{date_str}`!\nBảng nhắc nhở trong kênh <#{REMINDER_CHANNEL_ID}> đã được cập nhật.")
 
 # ── COMMAND: .testkey (TEST GEN KEY) ──
 @bot.command(name="testkey", aliases=["testgenkey", "testrotation"])
