@@ -17,14 +17,25 @@ import hmac
 import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
+from urllib.parse import parse_qs
 
 import aiohttp
 import discord
 from discord.ext import commands
-from fastapi import APIRouter, Request, Response, Form, HTTPException, Cookie
+from fastapi import APIRouter, Request, Response, HTTPException, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 log = logging.getLogger("aiclaw_mail_manager")
+
+async def get_form_data(request: Request) -> Dict[str, str]:
+    """Safely extracts form data without requiring python-multipart."""
+    try:
+        form = await request.form()
+        return {k: str(v) for k, v in form.items()}
+    except Exception:
+        body = await request.body()
+        parsed = parse_qs(body.decode("utf-8", errors="replace"))
+        return {k: v[0] if v else "" for k, v in parsed.items()}
 
 VN_TZ = timezone(timedelta(hours=7))
 
@@ -1043,10 +1054,12 @@ async def manage_portal(request: Request, msg: str = "", err: str = ""):
     return HTMLResponse(render_dashboard_html(emails=emails, success_msg=msg, error_msg=err))
 
 @mail_router.post("/manage/login")
-async def manage_login(request: Request, password: str = Form(...)):
+async def manage_login(request: Request):
     """Validates management password (Iamprmgvyt2013@)."""
+    form_data = await get_form_data(request)
+    password = form_data.get("password", "").strip()
     expected = os.getenv("MANAGE_PASSWORD", MANAGE_PASSWORD).strip()
-    if hmac.compare_digest(password.strip(), expected):
+    if hmac.compare_digest(password, expected):
         token = get_auth_token()
         resp = RedirectResponse(url="/manage", status_code=303)
         resp.set_cookie(
@@ -1068,19 +1081,18 @@ async def manage_logout():
     return resp
 
 @mail_router.post("/manage/send")
-async def manage_send(
-    request: Request,
-    recipient: str = Form(...),
-    subject: str = Form(...),
-    body: str = Form(...)
-):
+async def manage_send(request: Request):
     """Sends an email directly from the web interface using Resend."""
     if not is_manage_authenticated(request):
         return RedirectResponse(url="/manage?err=1", status_code=303)
 
-    recipient_clean = recipient.strip()
-    subject_clean = subject.strip()
-    body_clean = body.strip()
+    form_data = await get_form_data(request)
+    recipient_clean = form_data.get("recipient", "").strip()
+    subject_clean = form_data.get("subject", "").strip()
+    body_clean = form_data.get("body", "").strip()
+
+    if not recipient_clean or not subject_clean or not body_clean:
+        return RedirectResponse(url="/manage?err=Vui+lòng+điền+đầy+đủ+thông+tin+email", status_code=303)
 
     ok, message = await send_resend_email(to_email=recipient_clean, subject=subject_clean, text=body_clean)
 
@@ -1103,17 +1115,17 @@ async def manage_send(
         return RedirectResponse(url=f"/manage?err={message}", status_code=303)
 
 @mail_router.post("/manage/status")
-async def manage_update_status(
-    request: Request,
-    email_id: str = Form(...),
-    status: str = Form(...)
-):
+async def manage_update_status(request: Request):
     """Updates status of an email (unread, read, replied)."""
     if not is_manage_authenticated(request):
         return RedirectResponse(url="/manage?err=1", status_code=303)
 
-    if turso_ref:
-        await turso_ref.update_email_status(email_id.strip(), status.strip())
+    form_data = await get_form_data(request)
+    email_id = form_data.get("email_id", "").strip()
+    status = form_data.get("status", "").strip()
+
+    if turso_ref and email_id:
+        await turso_ref.update_email_status(email_id, status)
 
     return RedirectResponse(url="/manage", status_code=303)
 
