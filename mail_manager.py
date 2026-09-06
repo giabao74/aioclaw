@@ -49,6 +49,7 @@ MASTER_KEY = os.getenv("MASTER_OWNER_KEY", os.getenv("AIO_RESET_TOKEN", "")).str
 MANAGE_PASSWORD = os.getenv("MANAGE_PASSWORD", MASTER_KEY or "Iamprmgvyt2013@").strip()
 OWNER_ID = int(os.getenv("NOTIFY_USER_ID", os.getenv("OWNER_ID", "1262304052361035857")))
 REMINDER_CHANNEL_ID = int(os.getenv("REMINDER_CHANNEL_ID", "1494907926815445023"))
+RESEND_WEBHOOK_SECRET = os.getenv("RESEND_WEBHOOK_SECRET", "whsec_LGjyqnw9YrD7zho856EnGw3tPgOK7zHI").strip()
 
 # References to parent bot & DB
 bot_ref: Optional[commands.Bot] = None
@@ -102,7 +103,7 @@ async def send_resend_email(to_email: str, subject: str, text: str, html: str = 
 </html>"""
 
     payload = {
-        "from": f"Aegix Support <{SUPPORT_EMAIL}>",
+        "from": f"AEGIX Support <{SUPPORT_EMAIL}>",
         "to": [to_email],
         "subject": subject,
         "text": text,
@@ -330,6 +331,26 @@ async def handle_resend_webhook(request: Request):
         body_bytes = await request.body()
         if not body_bytes:
             return JSONResponse({"status": "error", "message": "Empty body"}, status_code=400)
+
+        # Optional Svix / Resend Webhook Signature Verification
+        svix_id = request.headers.get("svix-id")
+        svix_timestamp = request.headers.get("svix-timestamp")
+        svix_sig = request.headers.get("svix-signature")
+        secret = os.getenv("RESEND_WEBHOOK_SECRET", RESEND_WEBHOOK_SECRET).strip()
+
+        if secret and svix_id and svix_timestamp and svix_sig:
+            try:
+                import base64
+                raw_sec = secret[6:] if secret.startswith("whsec_") else secret
+                key_bytes = base64.b64decode(raw_sec)
+                to_sign = f"{svix_id}.{svix_timestamp}.".encode("utf-8") + body_bytes
+                computed_sig = base64.b64encode(hmac.new(key_bytes, to_sign, hashlib.sha256).digest()).decode("utf-8")
+                if any(part.split(",", 1)[-1] == computed_sig for part in svix_sig.split(" ")):
+                    log.info(f"🔐 Verified authentic Resend webhook signature (ID: {svix_id})")
+                else:
+                    log.warning(f"⚠️ Webhook signature mismatch for svix-id {svix_id}")
+            except Exception as sig_err:
+                log.warning(f"Signature check warning: {sig_err}")
 
         data = await request.json()
     except Exception as e:
