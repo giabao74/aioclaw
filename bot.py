@@ -17,13 +17,16 @@ import secrets
 import asyncio
 import logging
 import threading
+import hmac
+import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 
 import aiohttp
 import discord
 from discord.ext import commands, tasks
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response, Form, HTTPException, Cookie
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import uvicorn
 import paramiko
 from dotenv import load_dotenv
@@ -48,6 +51,12 @@ BOT_PREFIX = os.getenv("BOT_PREFIX", "?").strip()
 PORT = int(os.getenv("PORT", 10000))
 REMINDER_CHANNEL_ID = int(os.getenv("REMINDER_CHANNEL_ID", "1494907926815445023"))
 BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# Resend & Email Management Configuration (support@aegixbot.xyz)
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
+SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL", "support@aegixbot.xyz").strip()
+BASE_URL = os.getenv("BASE_URL", os.getenv("RENDER_EXTERNAL_URL", "https://aio-claw-render.onrender.com")).rstrip("/")
+MANAGE_PASSWORD = os.getenv("MANAGE_PASSWORD", MASTER_KEY or "Iamprmgvyt2013@").strip()
 
 # SFTP Credentials (HidenCloud)
 SFTP_HOST = os.getenv("SFTP_HOST", "theo.hidencloud.com")
@@ -308,6 +317,12 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents, help_command=None)
+
+# ──────────────────────────────────────────────
+# ATTACH EMAIL SYSTEM (support@aegixbot.xyz)
+# ──────────────────────────────────────────────
+from mail_manager import setup_mail_system
+setup_mail_system(bot, turso, app)
 
 @bot.event
 async def on_ready():

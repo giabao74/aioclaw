@@ -22,6 +22,7 @@ class TursoDB:
             clean_url += "/v2/pipeline"
         self.pipeline_url = clean_url
         self._initialized = False
+        self._email_cache: List[Dict[str, Any]] = []
 
     async def _execute_pipeline(self, statements: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         headers = {
@@ -103,6 +104,21 @@ class TursoDB:
             )
         """)
 
+        await self.execute("""
+            CREATE TABLE IF NOT EXISTS support_emails (
+                id TEXT PRIMARY KEY,
+                thread_id TEXT NOT NULL,
+                sender TEXT NOT NULL,
+                recipient TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                body_text TEXT DEFAULT '',
+                body_html TEXT DEFAULT '',
+                status TEXT DEFAULT 'unread',
+                is_reply INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+        """)
+
         existing = await self.get_all_reminders()
         existing_ids = {r["id"] for r in existing}
 
@@ -168,3 +184,119 @@ class TursoDB:
 
     async def set_config(self, key: str, value: str):
         await self.execute("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)", [key, str(value)])
+
+    # ──────────────────────────────────────────────
+    # SUPPORT EMAILS MANAGEMENT (support@aegixbot.xyz)
+    # ──────────────────────────────────────────────
+    async def find_existing_thread(self, sender: str, subject: str) -> Optional[Dict[str, Any]]:
+        """Finds if an incoming email belongs to an existing conversation thread."""
+        clean_subj = subject.lower().replace("re:", "").replace("fwd:", "").strip()
+        try:
+            rows = await self.execute("""
+                SELECT id, thread_id, status FROM support_emails
+                WHERE (sender = ? OR recipient = ?) AND lower(subject) LIKE ?
+                ORDER BY created_at DESC LIMIT 1
+            """, [sender, sender, f"%{clean_subj}%"])
+            if rows:
+                return rows[0]
+        except Exception as e:
+            log.warning(f"Turso find_existing_thread fallback to cache: {e}")
+        
+        # Fallback to in-memory cache
+        for item in reversed(self._email_cache):
+            if (item.get("sender") == sender or item.get("recipient") == sender) and clean_subj in item.get("subject", "").lower():
+                return item
+        return None
+
+    async def save_support_email(
+        self,
+        email_id: str,
+        thread_id: str,
+        sender: str,
+        recipient: str,
+        subject: str,
+        body_text: str = "",
+        body_html: str = "",
+        status: str = "unread",
+        is_reply: int = 0,
+        created_at: str = None
+    ) -> Dict[str, Any]:
+        """Saves incoming or outgoing email to Turso DB and memory cache."""
+        now_str = created_at or datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        email_item = {
+            "id": email_id,
+            "thread_id": thread_id,
+            "sender": sender,
+            "recipient": recipient,
+            "subject": subject,
+            "body_text": body_text,
+            "body_html": body_html,
+            "status": status,
+            "is_reply": is_reply,
+            "created_at": now_str
+        }
+
+        # Keep in local memory cache
+        # If ID already exists in cache, update it
+        existing_idx = next((i for i, em in enumerate(self._email_cache) if em["id"] == email_id), None)
+        if existing_idx is not None:
+            self._email_cache[existing_idx] = email_item
+        else:
+            self._email_cache.insert(0, email_item)
+            if len(self._email_cache) > 200:
+                self._email_cache.pop()
+
+        try:
+            await self.execute("""
+                INSERT OR REPLACE INTO support_emails
+                (id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [email_id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, now_str])
+        except Exception as e:
+            log.warning(f"Turso save_support_email error, saved to in-memory cache: {e}")
+
+        return email_item
+
+    async def get_all_emails(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Retrieves support emails sorted by most recent first."""
+        try:
+            rows = await self.execute("""
+                SELECT id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at
+                FROM support_emails
+                ORDER BY created_at DESC LIMIT ?
+            """, [limit])
+            if rows:
+                # Merge with cache if any new items are in cache
+                cached_ids = {r["id"] for r in rows}
+                for item in self._email_cache:
+                    if item["id"] not in cached_ids:
+                        rows.insert(0, item)
+                return rows[:limit]
+        except Exception as e:
+            log.warning(f"Turso get_all_emails error, falling back to cache: {e}")
+        
+        return self._email_cache[:limit]
+
+    async def get_email(self, email_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves a single email by ID."""
+        for item in self._email_cache:
+            if item["id"] == email_id:
+                return item
+        try:
+            rows = await self.execute("""
+                SELECT id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at
+                FROM support_emails WHERE id = ?
+            """, [email_id])
+            return rows[0] if rows else None
+        except Exception:
+            return None
+
+    async def update_email_status(self, email_id: str, status: str):
+        """Updates email status: 'unread', 'read', 'replied', 'user_replied'."""
+        for item in self._email_cache:
+            if item["id"] == email_id:
+                item["status"] = status
+        try:
+            await self.execute("UPDATE support_emails SET status = ? WHERE id = ?", [status, email_id])
+        except Exception as e:
+            log.warning(f"Turso update_email_status error: {e}")
