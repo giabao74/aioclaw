@@ -90,13 +90,13 @@ async def send_resend_email(to_email: str, subject: str, text: str, html: str = 
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
     <div style="background:linear-gradient(135deg,#4f46e5,#3b82f6);padding:24px;color:#ffffff;">
       <h2 style="margin:0;font-size:20px;font-weight:700;letter-spacing:-0.02em;">AEGIX SUPPORT TEAM</h2>
-      <p style="margin:6px 0 0 0;font-size:13px;opacity:0.85;">Trung tâm phản hồi hỗ trợ • {SUPPORT_EMAIL}</p>
+      <p style="margin:6px 0 0 0;font-size:13px;opacity:0.85;">Customer Support & Assistance • {SUPPORT_EMAIL}</p>
     </div>
     <div style="padding:28px;line-height:1.7;font-size:15px;color:#334155;">
       {text.replace(chr(10), '<br>')}
     </div>
     <div style="background:#f1f5f9;padding:16px 28px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;">
-      <p style="margin:0;">Email này được gửi chính thức từ <strong>{SUPPORT_EMAIL}</strong>. Bạn có thể bấm Trả lời (Reply) trực tiếp email này nếu cần hỗ trợ thêm.</p>
+      <p style="margin:0;">This email was sent officially from <strong>{SUPPORT_EMAIL}</strong>. You can reply directly to this email if you need further assistance.</p>
     </div>
   </div>
 </body>
@@ -222,6 +222,7 @@ class EmailNotificationView(discord.ui.View):
     def __init__(self, email_item: dict):
         super().__init__(timeout=None)
         self.email_item = email_item
+        email_id = email_item.get("id", "UNKNOWN")
 
         # Link button directly to hidden web /manage
         web_url = f"{BASE_URL}/manage"
@@ -231,35 +232,95 @@ class EmailNotificationView(discord.ui.View):
             url=web_url
         ))
 
-    @discord.ui.button(label="✉️ Trả lời nhanh", style=discord.ButtonStyle.primary, custom_id="btn_email_reply")
-    async def reply_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Dynamic persistent buttons
+        self.add_item(discord.ui.Button(
+            label="✉️ Trả lời nhanh",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"reply_email:{email_id}",
+            emoji="✉️"
+        ))
+        self.add_item(discord.ui.Button(
+            label="✅ Đánh dấu đã xử lý",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"resolve_email:{email_id}",
+            emoji="✅"
+        ))
+
+async def handle_email_interaction(interaction: discord.Interaction):
+    """Global interaction handler ensuring buttons work 24/7 even across bot restarts."""
+    if interaction.type != discord.InteractionType.component:
+        return False
+
+    cid = interaction.data.get("custom_id", "")
+    if not cid:
+        return False
+
+    # 1. Handle Quick Reply
+    if cid.startswith("reply_email:") or cid == "btn_email_reply":
+        email_id = cid.split(":", 1)[1] if ":" in cid else "UNKNOWN"
+        sender = "customer"
+        subject = "(Support Ticket)"
+
+        # Attempt to read from embed if unknown
+        if interaction.message and interaction.message.embeds:
+            emb = interaction.message.embeds[0]
+            if email_id == "UNKNOWN" and "#" in emb.title:
+                try:
+                    email_id = emb.title.split("#", 1)[1].split("]")[0].strip()
+                except Exception:
+                    pass
+            for f in emb.fields:
+                if "Người gửi" in f.name:
+                    sender = f.value.replace("`", "").strip()
+                if "Mã thư" in f.name and email_id == "UNKNOWN":
+                    email_id = f.value.replace("`", "").strip()
+                if "Tiêu đề" in f.name:
+                    subject = f.value.replace("**", "").strip()
+
+        # Check DB for best metadata
+        if turso_ref and email_id != "UNKNOWN":
+            item = await turso_ref.get_email(email_id)
+            if item:
+                sender = item.get("sender", sender)
+                subject = item.get("subject", subject)
+
         modal = EmailReplyModal(
-            email_id=self.email_item["id"],
-            sender=self.email_item["sender"],
-            original_subject=self.email_item["subject"],
+            email_id=email_id,
+            sender=sender,
+            original_subject=subject,
             parent_msg=interaction.message
         )
         await interaction.response.send_modal(modal)
+        return True
 
-    @discord.ui.button(label="✅ Đánh dấu đã xử lý", style=discord.ButtonStyle.secondary, custom_id="btn_email_done")
-    async def done_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        email_id = self.email_item["id"]
-        if turso_ref:
+    # 2. Handle Mark Resolved
+    elif cid.startswith("resolve_email:") or cid == "btn_email_done":
+        email_id = cid.split(":", 1)[1] if ":" in cid else "UNKNOWN"
+        if interaction.message and interaction.message.embeds and email_id == "UNKNOWN":
+            emb = interaction.message.embeds[0]
+            if "#" in emb.title:
+                try:
+                    email_id = emb.title.split("#", 1)[1].split("]")[0].strip()
+                except Exception:
+                    pass
+
+        if turso_ref and email_id != "UNKNOWN":
             await turso_ref.update_email_status(email_id, "read")
 
-        button.disabled = True
-        button.label = "Đã xử lý xong"
         try:
             if interaction.message and interaction.message.embeds:
                 embed = interaction.message.embeds[0]
                 embed.color = 0x64748B  # Slate
-                embed.title = f"📁 [Đã xử lý #{email_id}] {self.email_item['subject']}"
-                await interaction.response.edit_message(embed=embed, view=self)
-                return
+                embed.title = f"📁 [Đã xử lý #{email_id}] " + embed.title.split("]", 1)[-1].strip()
+                await interaction.response.edit_message(embed=embed)
+                return True
         except Exception:
             pass
 
         await interaction.response.send_message(f"✅ Đã đánh dấu thư `#{email_id}` là đã xử lý.", ephemeral=True)
+        return True
+
+    return False
 
 async def dispatch_email_to_discord(email_item: dict):
     """Sends notification with interactive buttons to Owner DM and Reminder Channel."""
@@ -370,12 +431,34 @@ async def handle_resend_webhook(request: Request):
     recipient = raw_to[0] if isinstance(raw_to, list) and raw_to else str(raw_to)
 
     subject = str(payload.get("subject", "(Không có tiêu đề)")).strip()
+    resend_email_id = payload.get("email_id") or payload.get("id")
     body_text = str(payload.get("text", "")).strip()
     body_html = str(payload.get("html", "")).strip()
 
+    # Resend inbound webhook sends metadata only. Fetch full body content via Resend Receiving API
+    current_key = os.getenv("RESEND_API_KEY", RESEND_API_KEY).strip()
+    if resend_email_id and current_key and not body_text:
+        try:
+            fetch_headers = {
+                "Authorization": f"Bearer {current_key}",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            }
+            connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=10)) as session:
+                async with session.get(f"https://api.resend.com/emails/receiving/{resend_email_id}", headers=fetch_headers) as resp:
+                    if resp.status == 200:
+                        full_data = await resp.json()
+                        body_text = str(full_data.get("text", "")).strip()
+                        body_html = str(full_data.get("html", "")).strip()
+                        log.info(f"📥 Fetched full email content for {resend_email_id} ({len(body_text)} chars)")
+                    else:
+                        log.warning(f"Could not fetch receiving email {resend_email_id}: HTTP {resp.status}")
+        except Exception as fetch_err:
+            log.warning(f"Error fetching receiving email content: {fetch_err}")
+
     if not body_text and body_html:
-        # Minimal text fallback
-        body_text = body_html.replace("<br>", "\n").replace("</p>", "\n")
+        import re
+        body_text = re.sub(r'<[^>]+>', '', body_html).strip()
 
     # Generate unique ID for this email
     email_id = f"EM-{secrets.token_hex(3).upper()}"
@@ -1159,4 +1242,5 @@ def setup_mail_system(bot_instance: commands.Bot, turso_instance: Any, app_insta
     bot_ref = bot_instance
     turso_ref = turso_instance
     app_instance.include_router(mail_router)
+    bot_instance.add_listener(handle_email_interaction, "on_interaction")
     log.info(f"📧 AIClaw Mail System attached: /manage (Protected) & Webhook /api/webhook/resend for {SUPPORT_EMAIL}")
