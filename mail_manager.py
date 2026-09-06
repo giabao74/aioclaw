@@ -18,6 +18,9 @@ import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 from urllib.parse import parse_qs
+from dotenv import load_dotenv
+
+load_dotenv()
 
 import aiohttp
 import discord
@@ -44,7 +47,7 @@ VN_TZ = timezone(timedelta(hours=7))
 # ──────────────────────────────────────────────
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL", "support@aegixbot.xyz").strip()
-BASE_URL = os.getenv("BASE_URL", os.getenv("RENDER_EXTERNAL_URL", "https://aio-claw-render.onrender.com")).rstrip("/")
+BASE_URL = os.getenv("BASE_URL", os.getenv("RENDER_EXTERNAL_URL", "https://aioclaw.onrender.com")).rstrip("/")
 MASTER_KEY = os.getenv("MASTER_OWNER_KEY", os.getenv("AIO_RESET_TOKEN", "")).strip()
 MANAGE_PASSWORD = os.getenv("MANAGE_PASSWORD", MASTER_KEY or "Iamprmgvyt2013@").strip()
 OWNER_ID = int(os.getenv("NOTIFY_USER_ID", os.getenv("OWNER_ID", "1262304052361035857")))
@@ -84,19 +87,50 @@ async def send_resend_email(to_email: str, subject: str, text: str, html: str = 
     }
 
     formatted_html = html or f"""<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:24px;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
-    <div style="background:linear-gradient(135deg,#4f46e5,#3b82f6);padding:24px;color:#ffffff;">
-      <h2 style="margin:0;font-size:20px;font-weight:700;letter-spacing:-0.02em;">AEGIX SUPPORT TEAM</h2>
-      <p style="margin:6px 0 0 0;font-size:13px;opacity:0.85;">Customer Support & Assistance • {SUPPORT_EMAIL}</p>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    /* Prevent email clients from making links unreadable */
+    a {{ color: #2563eb; text-decoration: none; }}
+    .header-email a, a.header-link {{
+      color: #ffffff !important;
+      text-decoration: none !important;
+    }}
+  </style>
+</head>
+<body style="margin:0;padding:24px;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px -4px rgba(0,0,0,0.06);">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#3730a3,#2563eb);padding:24px 28px;color:#ffffff;">
+      <table cellpadding="0" cellspacing="0" border="0" style="vertical-align:middle;width:100%;">
+        <tr>
+          <td style="vertical-align:middle;width:52px;padding-right:16px;">
+            <img src="https://aegixbot.xyz/static/aegix.png" width="48" height="48" alt="AEGIX" style="border-radius:50%;display:block;border:2px solid rgba(255,255,255,0.6);background:#080a10;box-shadow:0 2px 6px rgba(0,0,0,0.2);">
+          </td>
+          <td style="vertical-align:middle;">
+            <div style="font-size:20px;font-weight:700;letter-spacing:-0.02em;color:#ffffff;line-height:1.2;">AEGIX SUPPORT TEAM</div>
+            <div style="margin-top:6px;font-size:13px;color:#f8fafc;line-height:1.4;">
+              <span style="opacity:0.95;">Customer Support</span>
+              <span style="opacity:0.6;margin:0 6px;">•</span>
+              <span style="display:inline-block;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.35);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600;letter-spacing:0.2px;">
+                <a href="mailto:{SUPPORT_EMAIL}" style="color:#ffffff !important;text-decoration:none !important;font-weight:600;">{SUPPORT_EMAIL}</a>
+              </span>
+            </div>
+          </td>
+        </tr>
+      </table>
     </div>
-    <div style="padding:28px;line-height:1.7;font-size:15px;color:#334155;">
+    <!-- Body -->
+    <div style="padding:32px 28px;line-height:1.75;font-size:15px;color:#1e293b;background:#ffffff;min-height:100px;">
       {text.replace(chr(10), '<br>')}
     </div>
-    <div style="background:#f1f5f9;padding:16px 28px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;">
-      <p style="margin:0;">This email was sent officially from <strong>{SUPPORT_EMAIL}</strong>. You can reply directly to this email if you need further assistance.</p>
+    <!-- Footer -->
+    <div style="background:#f8fafc;padding:18px 28px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;line-height:1.6;">
+      <p style="margin:0;">
+        This email was sent officially from <strong><a href="mailto:{SUPPORT_EMAIL}" style="color:#2563eb !important;text-decoration:none;font-weight:600;">{SUPPORT_EMAIL}</a></strong>. You can reply directly to this email if you need further assistance.
+      </p>
     </div>
   </div>
 </body>
