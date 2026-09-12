@@ -21,6 +21,7 @@ import hmac
 import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
+from collections import defaultdict
 
 import aiohttp
 import discord
@@ -80,6 +81,36 @@ HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 HF_ROUTER_MODEL = os.getenv("HF_ROUTER_MODEL", "Qwen/Qwen2.5-72B-Instruct").strip()
 current_ai_model = os.getenv("DEFAULT_AI_MODEL", "openai/gpt-oss-20b").strip()
+
+# ──────────────────────────────────────────────
+# CONVERSATIONAL CHAT MEMORY (ROLLING BUFFER)
+# ──────────────────────────────────────────────
+chat_memory: Dict[int, List[Dict[str, str]]] = defaultdict(list)
+chat_memory_last_time: Dict[int, float] = {}
+MEMORY_TTL_SECONDS = 3600  # 1 hour auto-reset
+MAX_MEMORY_TURNS = 10     # Keep last 10 messages (5 user + 5 assistant turns)
+
+def get_chat_context(user_id: int) -> List[Dict[str, str]]:
+    """Lấy danh sách các tin nhắn ngữ cảnh trước đó của user (tự động reset nếu quá 1h không chat)."""
+    now = time.time()
+    if now - chat_memory_last_time.get(user_id, 0) > MEMORY_TTL_SECONDS:
+        chat_memory[user_id].clear()
+    chat_memory_last_time[user_id] = now
+    return list(chat_memory[user_id])
+
+def save_chat_turn(user_id: int, user_msg: str, assistant_reply: str):
+    """Lưu 1 lượt đối thoại (User + Assistant) vào bộ nhớ rolling của user."""
+    history = chat_memory[user_id]
+    history.append({"role": "user", "content": user_msg})
+    history.append({"role": "assistant", "content": assistant_reply})
+    if len(history) > MAX_MEMORY_TURNS * 2:
+        chat_memory[user_id] = history[-(MAX_MEMORY_TURNS * 2):]
+    chat_memory_last_time[user_id] = time.time()
+
+def reset_chat_context(user_id: int):
+    """Xóa sạch bộ nhớ cuộc trò chuyện của một user."""
+    chat_memory[user_id].clear()
+    chat_memory_last_time.pop(user_id, None)
 
 # ──────────────────────────────────────────────
 # TIME & SCHEDULER HELPERS (VIETNAM TIME UTC+7)
@@ -186,7 +217,7 @@ async def execute_unified_rotation(is_test: bool = False, trigger_source: str = 
     if not is_test:
         try:
             payload = {"reset_token": MASTER_KEY, "new_key": new_token, "reason": f"Auto Rotation ({trigger_source})"}
-            headers = {"User-Agent": BROWSER_UA, "Content-Type": "application/json"}
+            headers = {"User-Agent": BROWSER_UA, "Content-Type": "application/json", "X-API-Key": MASTER_KEY}
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 async with session.post(f"{AIO_GATEWAY_URL}/api/v1/reset-token", headers=headers, json=payload) as resp:
                     if resp.status == 200:
@@ -284,6 +315,14 @@ async def scheduler_vn_worker():
                 # Execute rotation
                 res = await execute_unified_rotation(is_test=False, trigger_source=f"Tự động định kỳ {day_name} (Giờ VN)")
                 log.info(f"🎉 Auto-Rotation completed: SFTP={res['sftp_ok']}, DM={res['dm_ok']}")
+
+            # Check Daily DM Reminder (Mỗi ngày gửi 1 lần vào 08:00 AM VN Time)
+            global last_daily_digest_date_vn
+            daily_hour = int(os.getenv("DAILY_REMINDER_HOUR_VN", 8))
+            if now_vn.hour >= daily_hour and last_daily_digest_date_vn != today_str:
+                log.info(f"🔔 [TỰ ĐỘNG HÀNG NGÀY] Bắt đầu gửi DM nhắc nhở ngày {today_str} cho Owner...")
+                last_daily_digest_date_vn = today_str
+                await send_daily_dm_reminder()
 
         except Exception as e:
             log.error(f"Scheduler worker exception: {e}")
@@ -652,11 +691,12 @@ class DashboardView(discord.ui.View):
         self.add_item(duo_btn)
 
 
-async def update_channel_reminder_message():
+async def update_channel_reminder_message(clear_channel: bool = True):
     """
-    Quản lý và cập nhật DUY NHẤT 1 tin nhắn trong kênh REMINDER_CHANNEL_ID (1494907926815445023).
-    Chỉ thực hiện CHỈNH SỬA (edit), không gửi nhiều tin nhắn để tránh spam / trùng lặp.
-    Message ID được lưu cố định trong Turso DB (bảng bot_config: 'channel_reminder_message_id').
+    Quản lý tin nhắn trong kênh REMINDER_CHANNEL_ID (1494907926815445023).
+    • Tự động clear sạch toàn bộ tin nhắn cũ trong channel đã cấu hình
+    • Gửi panel bảng điều khiển theo dõi gia hạn mới (Turso DB)
+    • Bắn Ghost Ping cho Owner rồi xóa ngay lập tức để kích hoạt thông báo
     """
     try:
         channel = bot.get_channel(REMINDER_CHANNEL_ID)
@@ -671,11 +711,66 @@ async def update_channel_reminder_message():
         embed = build_reminders_embed(items)
         view = DashboardView(services=items, db=turso)
 
+        # 1. Tự động xóa sạch toàn bộ tin nhắn cũ trong channel đã config
+        if clear_channel:
+            try:
+                deleted = await channel.purge(limit=100)
+                log.info(f"🧹 Đã xóa {len(deleted)} tin nhắn cũ trong kênh reminder {REMINDER_CHANNEL_ID}")
+            except Exception as pe:
+                log.warning(f"Lỗi bulk purge, xóa thủ công: {pe}")
+                try:
+                    async for old_m in channel.history(limit=50):
+                        try:
+                            await old_m.delete()
+                            await asyncio.sleep(0.3)
+                        except Exception:
+                            pass
+                except Exception as del_err:
+                    log.warning(f"Lỗi xóa tin nhắn cũ: {del_err}")
+
+        # 2. Gửi mới lại panel bảng điều khiển gia hạn
+        panel_msg = await channel.send(embed=embed, view=view)
+        await turso.set_config("channel_reminder_message_id", str(panel_msg.id))
+        log.info(f"✅ Đã gửi panel reminder mới (ID: {panel_msg.id}) vào kênh {REMINDER_CHANNEL_ID}")
+
+        # 3. Ghost Ping 1 cái rồi xóa ngay lập tức để kích hoạt thông báo
+        try:
+            ping_msg = await channel.send(f"<@{OWNER_ID}>")
+            await ping_msg.delete()
+            log.info(f"👻 Đã ghost ping Owner {OWNER_ID} và xóa tin nhắn thành công!")
+        except Exception as ping_err:
+            log.warning(f"Lỗi ghost ping: {ping_err}")
+
+    except Exception as e:
+        log.error(f"Error in update_channel_reminder_message: {e}", exc_info=True)
+
+
+async def send_daily_dm_reminder():
+    """
+    Gửi tin nhắn Direct Message (DM) hằng ngày nhắc nhở Owner:
+    • Báo cáo tổng thể hạn gia hạn tất cả dịch vụ (HidenCloud, OptikLink, v.v.)
+    • Nhắc nhở ngọn lửa Duolingo Streak hôm nay
+    • Tự động clear channel, gửi lại panel mới và bắn ghost ping!
+    """
+    try:
+        owner = bot.get_user(OWNER_ID) or await bot.fetch_user(OWNER_ID)
+        if not owner:
+            log.warning(f"Cannot find Owner {OWNER_ID} for daily DM.")
+            return False
+
+        items = await turso.get_all_reminders()
         now_vn = datetime.now(VN_TZ).replace(tzinfo=None)
+
         urgent_services = []
+        normal_services = []
+        duo_item = None
+
         for it in items:
-            if it.get("category") == "duolingo":
+            cat = it.get("category", "service")
+            if cat == "duolingo":
+                duo_item = it
                 continue
+            
             t_dt = None
             for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d %b %Y", "%d %b %Y %H:%M:%S"):
                 try:
@@ -683,44 +778,78 @@ async def update_channel_reminder_message():
                     break
                 except Exception:
                     pass
+
             if t_dt:
                 diff = (t_dt - now_vn).total_seconds()
-                if diff <= 1.5 * 86400:
-                    urgent_services.append(it["name"])
+                days_left = diff / 86400
+                if diff <= 0:
+                    urgent_services.append((it, "🚨 **[ĐÃ QUÁ HẠN]**", diff))
+                elif diff <= 2 * 86400:
+                    hours_left = max(0, int(diff // 3600))
+                    urgent_services.append((it, f"⚠️ **[Còn ~{hours_left}h]**", diff))
+                else:
+                    normal_services.append((it, f"🟢 Còn ~{int(days_left)} ngày", diff))
+            else:
+                normal_services.append((it, "❓ Chưa xác định", 999999))
+
+        embed = discord.Embed(
+            title="🔔 AIClaw — Báo Cáo & Nhắc Nhở Hàng Ngày",
+            description=(
+                f"Chào <@{OWNER_ID}>! Đây là báo cáo nhắc nhở định kỳ hằng ngày của bạn:\n"
+                f"📅 **Thời gian:** `{format_vn_time()}`"
+            ),
+            color=0xEF4444 if urgent_services else 0x6366F1,
+            timestamp=discord.utils.utcnow()
+        )
 
         if urgent_services:
-            content = f"<@{OWNER_ID}> ⚠️ **Đến giờ check và gia hạn dịch vụ rồi nha!** 🔥 *(Cần gia hạn: {', '.join(urgent_services)})*"
+            urg_text = ""
+            for it, status_str, _ in urgent_services:
+                urg_text += f"• **{it['name']}** (`{it['id']}`): {status_str} — [Gia hạn]({it['url']})\n"
+            embed.add_field(name="🚨 CẦN GIA HẠN NGAY", value=urg_text.strip(), inline=False)
         else:
-            content = f"<@{OWNER_ID}> 🔔 **Bảng theo dõi dịch vụ & gia hạn tự động (Turso DB)**"
+            embed.add_field(name="🟢 Trạng Thái Dịch Vụ", value="Tất cả các dịch vụ HidenCloud & OptikLink đều đang trong hạn an toàn.", inline=False)
 
-        saved_msg_id = await turso.get_config("channel_reminder_message_id")
-        msg = None
-        if saved_msg_id:
-            try:
-                msg = await channel.fetch_message(int(saved_msg_id))
-            except discord.NotFound:
-                log.info("Reminder message not found on Discord (deleted). Creating a new one...")
-                msg = None
-            except Exception as e:
-                log.warning(f"Error fetching reminder message {saved_msg_id}: {e}")
-                msg = None
+        if normal_services:
+            norm_text = ""
+            for it, status_str, _ in normal_services[:6]:
+                norm_text += f"• **{it['name']}** (`{it['id']}`): {status_str}\n"
+            embed.add_field(name="🖥️ Danh Sách Dịch Vụ", value=norm_text.strip(), inline=False)
 
-        if msg:
-            await msg.edit(content=content, embed=embed, view=view)
-            log.info(f"Edited existing reminder message {msg.id} in channel {REMINDER_CHANNEL_ID}")
-        else:
-            new_msg = await channel.send(content=content, embed=embed, view=view)
-            await turso.set_config("channel_reminder_message_id", str(new_msg.id))
-            log.info(f"Created initial reminder message {new_msg.id} in channel {REMINDER_CHANNEL_ID} and saved to Turso DB")
+        # Duolingo Streak
+        if duo_item:
+            embed.add_field(
+                name="🦉 Duolingo Streak Reminder",
+                value=f"Nhớ vào học Duolingo hôm nay để giữ vững chuỗi Streak nhé!\n• [Mở Duolingo Học Ngay]({duo_item['url']})\n• Xác nhận đã học: `{BOT_PREFIX}duolingo`",
+                inline=False
+            )
+
+        embed.add_field(
+            name="📍 Bảng Điều Khiển Chi Tiết",
+            value=f"Kênh theo dõi: <#{REMINDER_CHANNEL_ID}> *(Đã tự động làm mới và ghost ping)*",
+            inline=False
+        )
+        embed.set_footer(text="AIClaw Daily Reminder • Tự động gửi DM mỗi ngày")
+
+        view = DashboardView(services=items, db=turso)
+        await owner.send(embed=embed, view=view)
+        log.info(f"📬 Successfully sent daily reminder DM to Owner {OWNER_ID}")
+
+        # Tự động clear channel, gửi mới panel và ghost ping
+        await update_channel_reminder_message(clear_channel=True)
+        return True
+
     except Exception as e:
-        log.error(f"Error in update_channel_reminder_message: {e}", exc_info=True)
+        log.error(f"Failed to send daily DM reminder: {e}", exc_info=True)
+        return False
 
 
-@tasks.loop(minutes=15)
+@tasks.loop(minutes=30)
 async def auto_reminder_loop():
-    """Tự động quét các dịch vụ trên Turso DB và cập nhật tin nhắn duy nhất trong channel reminder mỗi 15 phút."""
+    """Tự động kiểm tra và làm mới panel trong channel reminder."""
     try:
-        await update_channel_reminder_message()
+        # Cập nhật nhẹ hoặc duy trì view
+        pass
     except Exception as e:
         log.error(f"Error in auto_reminder_loop: {e}", exc_info=True)
 
@@ -793,9 +922,24 @@ async def check_reminders_cmd(ctx):
     """Kiểm tra ngay lập tức các dịch vụ và cập nhật tin nhắn duy nhất trong channel reminder."""
     if ctx.author.id != OWNER_ID:
         return await ctx.send("❌ Chỉ Owner mới có quyền chạy kiểm tra.")
-    msg = await ctx.send(f"🔍 Đang quét dịch vụ trong Turso DB và cập nhật kênh <#{REMINDER_CHANNEL_ID}>...")
-    await update_channel_reminder_message()
-    await msg.edit(content=f"✅ Đã cập nhật thành công tin nhắn duy nhất trong kênh <#{REMINDER_CHANNEL_ID}>!")
+    msg = await ctx.send(f"🔍 Đang quét dịch vụ trong Turso DB, dọn dẹp và cập nhật kênh <#{REMINDER_CHANNEL_ID}>...")
+    await update_channel_reminder_message(clear_channel=True)
+    await msg.edit(content=f"✅ Đã dọn dẹp kênh <#{REMINDER_CHANNEL_ID}>, gửi bảng panel mới và ghost ping!")
+
+
+# ── COMMAND: ?dailyreminder ──
+@bot.command(name="dailyreminder", aliases=["testdmreminder", "sendreminder", "rundm"])
+async def daily_reminder_cmd(ctx):
+    """Gửi ngay DM nhắc nhở hôm nay cho Owner, làm mới channel và ghost ping."""
+    if ctx.author.id != OWNER_ID:
+        return await ctx.send("❌ Chỉ Owner mới có quyền kích hoạt gửi DM nhắc nhở.")
+    msg = await ctx.send("⏳ Đang chuẩn bị và gửi DM nhắc nhở hàng ngày...")
+    ok = await send_daily_dm_reminder()
+    if ok:
+        await msg.edit(content=f"✅ Đã gửi thành công DM nhắc nhở hàng ngày cho bạn! Kênh <#{REMINDER_CHANNEL_ID}> đã được dọn sạch, gửi panel mới và ghost ping.")
+    else:
+        await msg.edit(content="❌ Không thể gửi DM nhắc nhở (vui lòng kiểm tra quyền mở DM của bot).")
+
 
 
 # ── COMMAND: ?addservice ──
@@ -999,15 +1143,73 @@ async def model_cmd(ctx, *, model_name: str = None):
 
     await ctx.send(f"✅ Đã chuyển mô hình AI sang: **`{current_ai_model}`**!\nHãy thử trò chuyện ngay bằng lệnh: `{BOT_PREFIX}chat <câu hỏi>`")
 
-# ── COMMAND: ?chat (AI MULTI-ENGINE INTEGRATION) ──
+# ── COMMAND: ?clearchat ──
+@bot.command(name="clearchat", aliases=["newchat", "resetmem", "clearconvo"])
+async def clearchat_cmd(ctx):
+    """Xóa sạch bộ nhớ hội thoại của AI với bạn để bắt đầu chủ đề mới."""
+    reset_chat_context(ctx.author.id)
+    await ctx.reply("🧹 **Đã làm mới bộ nhớ hội thoại!** AIClaw đã quên các tin nhắn trước và sẵn sàng cho chủ đề mới.")
+
+
+# ── COMMAND: ?chat (AI MULTI-ENGINE INTEGRATION WITH MEMORY) ──
 @bot.command(name="chat", aliases=["ask", "ai", "qwen", "gpt"])
 async def chat_cmd(ctx, *, prompt: str = None):
-    """Trò chuyện trực tiếp với AI thông minh (GPT-OSS 20B / 120B / Qwen)."""
+    """Trò chuyện trực tiếp với AI thông minh có nhớ ngữ cảnh (Qwen 2.5 / GPT-OSS 20B / 120B)."""
     if not prompt:
         return await ctx.send(f"⚠️ Cách dùng: `{BOT_PREFIX}chat <câu hỏi/tin nhắn>`\nVí dụ: `{BOT_PREFIX}chat Xin chào, hãy giới thiệu về bạn!`")
 
     async with ctx.typing():
         t0 = time.monotonic()
+
+        # Nạp lịch sử hội thoại trước đó của user (Rolling memory)
+        history = get_chat_context(ctx.author.id)
+        system_prompt = (
+            "You are AIClaw, a fast, helpful, friendly, and intelligent AI assistant for Discord. "
+            "You have continuous conversation memory and remember what the user mentioned previously. "
+            "Answer clearly and comprehensively in Vietnamese if the user writes in Vietnamese."
+        )
+        messages_payload = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
+
+        # 0. Hugging Face Gateway (AIO Claw Space with Qwen 2.5) if requested or by default
+        if any(k in current_ai_model.lower() for k in ["qwen", "hf", "huggingface", "gateway", "aegix"]):
+            try:
+                hf_chat_url = f"{AIO_GATEWAY_URL}/api/v1/chat"
+                hf_headers = {
+                    "User-Agent": BROWSER_UA,
+                    "Content-Type": "application/json",
+                    "X-API-Key": MASTER_KEY
+                }
+                hf_req_body = {
+                    "messages": messages_payload,
+                    "author_id": str(ctx.author.id),
+                    "guild_id": str(ctx.guild.id if ctx.guild else "@me"),
+                    "model": current_ai_model
+                }
+                connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+                async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=30)) as session:
+                    async with session.post(hf_chat_url, headers=hf_headers, json=hf_req_body) as resp:
+                        latency = round((time.monotonic() - t0) * 1000)
+                        if resp.status == 200:
+                            data = await resp.json()
+                            reply = data.get("response") or data.get("reply", "")
+                            model_used = data.get("model", "Qwen 2.5 on HF Gateway")
+                            footer = f"\n\n*(⚡ {latency} ms · {model_used})*"
+                            save_chat_turn(ctx.author.id, prompt, reply)
+                            if len(reply) + len(footer) > 1950:
+                                chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
+                                for idx, chunk in enumerate(chunks):
+                                    if idx == len(chunks) - 1:
+                                        await ctx.reply(f"{chunk}{footer}")
+                                    else:
+                                        await ctx.reply(chunk)
+                            else:
+                                await ctx.reply(f"{reply}{footer}")
+                            return
+                        else:
+                            err_txt = await resp.text()
+                            log.warning(f"HF Gateway Chat returned HTTP {resp.status}: {err_txt}")
+            except Exception as hf_err:
+                log.warning(f"HF Gateway Chat call failed, falling back to Groq: {hf_err}")
 
         # 1. Direct Groq (Ultra-Fast ~500ms, 100% Free & Unblocked)
         if GROQ_API_KEY and (not OPENROUTER_API_KEY or any(k in current_ai_model.lower() for k in ["gpt-oss", "20b", "120b", "groq", "qwen3"])):
@@ -1017,7 +1219,6 @@ async def chat_cmd(ctx, *, prompt: str = None):
                     "Content-Type": "application/json",
                     "User-Agent": BROWSER_UA
                 }
-                # Model selection on Groq
                 groq_model = "openai/gpt-oss-20b"
                 if "120b" in current_ai_model.lower():
                     groq_model = "openai/gpt-oss-120b"
@@ -1028,10 +1229,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
 
                 payload = {
                     "model": groq_model,
-                    "messages": [
-                        {"role": "system", "content": "You are AIClaw, a fast, helpful, and intelligent AI assistant for Discord. Answer clearly and comprehensively in Vietnamese if the user writes in Vietnamese."},
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": messages_payload,
                     "max_tokens": 768,
                     "temperature": 0.7
                 }
@@ -1043,6 +1241,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
                             data = await resp.json()
                             reply = data["choices"][0]["message"]["content"]
                             footer = f"\n\n*(⚡ {latency} ms · {groq_model} on Groq Free)*"
+                            save_chat_turn(ctx.author.id, prompt, reply)
                             if len(reply) + len(footer) > 1950:
                                 chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
                                 for idx, chunk in enumerate(chunks):
@@ -1070,10 +1269,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
                 }
                 payload = {
                     "model": current_ai_model if ":" in current_ai_model or "/" in current_ai_model else "openrouter/free",
-                    "messages": [
-                        {"role": "system", "content": "You are AIClaw, a helpful AI assistant for Discord. Answer clearly in Vietnamese."},
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": messages_payload,
                     "max_tokens": 768,
                     "temperature": 0.7
                 }
@@ -1086,6 +1282,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
                             reply = data["choices"][0]["message"]["content"]
                             model_used = data.get("model", current_ai_model)
                             footer = f"\n\n*(⚡ {latency} ms · {model_used} on OpenRouter)*"
+                            save_chat_turn(ctx.author.id, prompt, reply)
                             if len(reply) + len(footer) > 1950:
                                 chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
                                 for idx, chunk in enumerate(chunks):
@@ -1108,10 +1305,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
                 }
                 payload = {
                     "model": "Qwen/Qwen2.5-72B-Instruct",
-                    "messages": [
-                        {"role": "system", "content": "You are AIClaw, a helpful Discord AI assistant. Answer clearly in Vietnamese."},
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": messages_payload,
                     "max_tokens": 768,
                     "temperature": 0.7
                 }
@@ -1123,6 +1317,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
                             data = await resp.json()
                             reply = data["choices"][0]["message"]["content"]
                             footer = f"\n\n*(⚡ {latency} ms · Qwen 2.5 72B on HF GPU)*"
+                            save_chat_turn(ctx.author.id, prompt, reply)
                             if len(reply) + len(footer) > 1950:
                                 chunks = [reply[i:i+1850] for i in range(0, len(reply), 1850)]
                                 for idx, chunk in enumerate(chunks):
@@ -1137,6 +1332,7 @@ async def chat_cmd(ctx, *, prompt: str = None):
                 log.warning(f"Direct HF Router call error: {e}")
 
         await ctx.reply("⚠️ Hiện tại không thể kết nối tới các dịch vụ AI trực tiếp (Groq / OpenRouter / Hugging Face). Vui lòng thử lại sau!")
+
 
 # ──────────────────────────────────────────────
 # AUTOMOD REAL-TIME INSPECTION
