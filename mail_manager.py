@@ -95,20 +95,20 @@ async def generate_email_ai_draft(sender: str, subject: str, body_text: str, thr
             history_ctx = "\nLịch sử trao đổi trước đó:\n" + "\n".join(prev_lines)
 
     system_prompt = (
-        "Bạn là Chuyên viên Hỗ trợ Kỹ thuật Cấp cao của hệ thống AEGIX & AIClaw (Autonomous Discord Security & Threat Intelligence). "
-        "Nhiệm vụ của bạn là soạn một thư phản hồi hỗ trợ khách hàng thật lịch sự, thấu cảm, rõ ràng và chuyên nghiệp. "
-        "Nguyên tắc soạn thư:\n"
-        "1. Ngôn ngữ: Nếu khách viết tiếng Việt thì trả lời bằng tiếng Việt; nếu khách viết tiếng Anh thì trả lời bằng tiếng Anh.\n"
-        "2. Cấu trúc:\n"
-        "   - Lời chào trang trọng (ví dụ: 'Kính gửi Quý khách / Chào bạn,')\n"
-        "   - Xác nhận đã nhận được yêu cầu về [chủ đề câu hỏi]\n"
-        "   - Hướng dẫn hoặc giải đáp chi tiết theo từng bước hoặc gạch đầu dòng ngắn gọn, dễ hiểu.\n"
-        "   - Lời dặn dò sẵn sàng giải đáp thêm nếu khách cần hỗ trợ.\n"
-        "   - Ký tên trang trọng:\n"
-        "     Trân trọng,\n"
-        "     Đội ngũ Hỗ trợ Kỹ thuật AEGIX & AIClaw\n"
+        "You are the Senior Customer Support & Threat Operations Specialist for AEGIX (Autonomous Discord Security & Threat Intelligence Bot). "
+        "Your duty is to draft a polite, clear, empathetic, and professional support email reply in fluent English. "
+        "Guidelines:\n"
+        "1. Language: Always write the response in English (unless the customer explicitly requested Vietnamese, otherwise default to English).\n"
+        "2. Structure:\n"
+        "   - Warm professional greeting (e.g., 'Hello,' or 'Dear User,')\n"
+        "   - Acknowledge their inquiry regarding [subject/issue]\n"
+        "   - Provide clear, actionable answers or step-by-step guidance using clean bullet points.\n"
+        "   - Reassure the customer and invite them to reach out if they need further assistance.\n"
+        "   - Professional sign-off:\n"
+        "     Best regards,\n"
+        "     AEGIX Support & Threat Intelligence Team\n"
         "     support@aegixbot.xyz | https://aegixbot.xyz\n"
-        "3. ĐẶC BIỆT: Chỉ xuất DUY NHẤT nội dung bức thư để gửi đi, không thêm ghi chú, không đóng khung code markdown."
+        "3. CRITICAL: Output ONLY the raw email body text directly, no meta commentary or markdown code blocks."
     )
 
     user_prompt = (
@@ -200,12 +200,12 @@ async def generate_email_ai_draft(sender: str, subject: str, body_text: str, thr
     # Default fallback template if no AI provider answered
     if not draft_reply:
         draft_reply = (
-            f"Kính gửi Quý khách,\n\n"
-            f"Đội ngũ Hỗ trợ AEGIX đã nhận được email của bạn liên quan đến: '{subject}'.\n\n"
-            f"Chúng tôi đang xem xét chi tiết yêu cầu này và sẽ phản hồi sớm nhất có thể. "
-            f"Nếu bạn có thêm thông tin bổ sung, vui lòng phản hồi trực tiếp vào email này.\n\n"
-            f"Trân trọng,\n"
-            f"Đội ngũ Hỗ trợ Kỹ thuật AEGIX & AIClaw\n"
+            f"Hello,\n\n"
+            f"Thank you for contacting AEGIX Support regarding: '{subject}'.\n\n"
+            f"Our team has received your message and is currently reviewing it. We will follow up with you shortly. "
+            f"If you have any additional details or logs to share, feel free to reply directly to this email.\n\n"
+            f"Best regards,\n"
+            f"AEGIX Support & Threat Operations Team\n"
             f"support@aegixbot.xyz | https://aegixbot.xyz"
         )
 
@@ -246,12 +246,12 @@ async def send_resend_email(
         text_paragraphs = f"<p style='margin:0 0 12px;line-height:1.6;'>{text}</p>"
 
     formatted_html = html or f"""<!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    a {{ color: #2563eb; text-decoration: none; }}
+    a {{ color: #38bdf8; text-decoration: none; }}
     .header-email a, a.header-link {{ color: #ffffff !important; text-decoration: none !important; }}
   </style>
 </head>
@@ -267,7 +267,7 @@ async def send_resend_email(
           <td style="vertical-align:middle;">
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.02em;color:#ffffff;line-height:1.2;">AEGIX SUPPORT TEAM</div>
             <div style="margin-top:6px;font-size:13px;color:#f8fafc;line-height:1.4;">
-              <span style="opacity:0.95;">Chăm Sóc & Hỗ Trợ Kỹ Thuật</span>
+              <span style="opacity:0.95;">Customer Support & Operations</span>
               <span style="opacity:0.6;margin:0 6px;">•</span>
               <span style="display:inline-block;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.35);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600;letter-spacing:0.2px;">
                 <a href="mailto:{SUPPORT_EMAIL}" style="color:#ffffff !important;text-decoration:none !important;font-weight:600;">{SUPPORT_EMAIL}</a>
@@ -285,8 +285,8 @@ async def send_resend_email(
 
     <!-- Footer -->
     <div style="padding:18px 28px;background:#090d16;border-top:1px solid #1f2937;font-size:12px;color:#64748b;line-height:1.5;">
-      <div>Đây là email phản hồi chính thức từ hệ thống bảo mật <strong>AEGIX & AIClaw</strong>.</div>
-      <div style="margin-top:4px;">Nếu bạn có thêm thắc mắc, bạn có thể trả lời trực tiếp email này hoặc truy cập <a href="https://aegixbot.xyz" style="color:#38bdf8;">aegixbot.xyz</a>.</div>
+      <div>This is an official communication from <strong>AEGIX Threat Intelligence & Protection</strong>.</div>
+      <div style="margin-top:4px;">If you have any further questions, feel free to reply directly to this email or visit <a href="https://aegixbot.xyz" style="color:#38bdf8;text-decoration:none;">aegixbot.xyz</a>.</div>
     </div>
   </div>
 </body>
