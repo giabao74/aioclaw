@@ -115,9 +115,19 @@ class TursoDB:
                 body_html TEXT DEFAULT '',
                 status TEXT DEFAULT 'unread',
                 is_reply INTEGER DEFAULT 0,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                attachments TEXT DEFAULT '[]',
+                ai_draft TEXT DEFAULT '',
+                ai_summary TEXT DEFAULT ''
             )
         """)
+
+        # Safe schema migrations for existing databases
+        for col, col_def in [("attachments", "TEXT DEFAULT '[]'"), ("ai_draft", "TEXT DEFAULT ''"), ("ai_summary", "TEXT DEFAULT ''")]:
+            try:
+                await self.execute(f"ALTER TABLE support_emails ADD COLUMN {col} {col_def}")
+            except Exception:
+                pass
 
         existing = await self.get_all_reminders()
         existing_ids = {r["id"] for r in existing}
@@ -219,10 +229,19 @@ class TursoDB:
         body_html: str = "",
         status: str = "unread",
         is_reply: int = 0,
-        created_at: str = None
+        created_at: str = None,
+        attachments: Any = None,
+        ai_draft: str = "",
+        ai_summary: str = ""
     ) -> Dict[str, Any]:
         """Saves incoming or outgoing email to Turso DB and memory cache."""
         now_str = created_at or datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        import json
+        if isinstance(attachments, (list, dict)):
+            att_json = json.dumps(attachments, ensure_ascii=False)
+        else:
+            att_json = str(attachments or "[]")
+
         email_item = {
             "id": email_id,
             "thread_id": thread_id,
@@ -233,7 +252,10 @@ class TursoDB:
             "body_html": body_html,
             "status": status,
             "is_reply": is_reply,
-            "created_at": now_str
+            "created_at": now_str,
+            "attachments": att_json,
+            "ai_draft": ai_draft,
+            "ai_summary": ai_summary
         }
 
         # Keep in local memory cache
@@ -249,11 +271,18 @@ class TursoDB:
         try:
             await self.execute("""
                 INSERT OR REPLACE INTO support_emails
-                (id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, [email_id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, now_str])
+                (id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at, attachments, ai_draft, ai_summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [email_id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, now_str, att_json, ai_draft, ai_summary])
         except Exception as e:
-            log.warning(f"Turso save_support_email error, saved to in-memory cache: {e}")
+            try:
+                await self.execute("""
+                    INSERT OR REPLACE INTO support_emails
+                    (id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [email_id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, now_str])
+            except Exception as e2:
+                log.warning(f"Turso save_support_email error, saved to in-memory cache: {e2}")
 
         return email_item
 
@@ -261,7 +290,10 @@ class TursoDB:
         """Retrieves support emails sorted by most recent first."""
         try:
             rows = await self.execute("""
-                SELECT id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at
+                SELECT id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at,
+                       COALESCE(attachments, '[]') as attachments,
+                       COALESCE(ai_draft, '') as ai_draft,
+                       COALESCE(ai_summary, '') as ai_summary
                 FROM support_emails
                 ORDER BY created_at DESC LIMIT ?
             """, [limit])
@@ -284,7 +316,10 @@ class TursoDB:
                 return item
         try:
             rows = await self.execute("""
-                SELECT id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at
+                SELECT id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at,
+                       COALESCE(attachments, '[]') as attachments,
+                       COALESCE(ai_draft, '') as ai_draft,
+                       COALESCE(ai_summary, '') as ai_summary
                 FROM support_emails WHERE id = ?
             """, [email_id])
             return rows[0] if rows else None
@@ -300,3 +335,70 @@ class TursoDB:
             await self.execute("UPDATE support_emails SET status = ? WHERE id = ?", [status, email_id])
         except Exception as e:
             log.warning(f"Turso update_email_status error: {e}")
+
+    async def update_email_ai_draft(self, email_id: str, ai_draft: str, ai_summary: str = ""):
+        """Updates AI draft and AI summary for an email."""
+        for item in self._email_cache:
+            if item["id"] == email_id:
+                item["ai_draft"] = ai_draft
+                if ai_summary:
+                    item["ai_summary"] = ai_summary
+        try:
+            await self.execute("""
+                UPDATE support_emails
+                SET ai_draft = ?, ai_summary = CASE WHEN ? != '' THEN ? ELSE ai_summary END
+                WHERE id = ?
+            """, [ai_draft, ai_summary, ai_summary, email_id])
+        except Exception as e:
+            log.warning(f"Turso update_email_ai_draft error: {e}")
+
+    async def get_thread_emails(self, thread_id: str) -> List[Dict[str, Any]]:
+        """Retrieves all emails belonging to a thread in chronological order."""
+        try:
+            rows = await self.execute("""
+                SELECT id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at,
+                       COALESCE(attachments, '[]') as attachments,
+                       COALESCE(ai_draft, '') as ai_draft,
+                       COALESCE(ai_summary, '') as ai_summary
+                FROM support_emails
+                WHERE thread_id = ? OR id = ?
+                ORDER BY created_at ASC
+            """, [thread_id, thread_id])
+            if rows:
+                return rows
+        except Exception as e:
+            log.warning(f"Turso get_thread_emails error: {e}")
+
+        # Fallback to cache
+        matched = [em for em in self._email_cache if em.get("thread_id") == thread_id or em.get("id") == thread_id]
+        matched.sort(key=lambda x: x.get("created_at", ""))
+        return matched
+
+    async def search_emails(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Searches emails across sender, recipient, subject, body or ID."""
+        q = f"%{query.strip().lower()}%"
+        try:
+            rows = await self.execute("""
+                SELECT id, thread_id, sender, recipient, subject, body_text, body_html, status, is_reply, created_at,
+                       COALESCE(attachments, '[]') as attachments,
+                       COALESCE(ai_draft, '') as ai_draft,
+                       COALESCE(ai_summary, '') as ai_summary
+                FROM support_emails
+                WHERE lower(sender) LIKE ? OR lower(subject) LIKE ? OR lower(body_text) LIKE ? OR lower(id) LIKE ?
+                ORDER BY created_at DESC LIMIT ?
+            """, [q, q, q, q, limit])
+            if rows:
+                return rows
+        except Exception as e:
+            log.warning(f"Turso search_emails error: {e}")
+
+        # Fallback to cache
+        q_raw = query.strip().lower()
+        matched = [
+            em for em in self._email_cache
+            if q_raw in em.get("sender", "").lower()
+            or q_raw in em.get("subject", "").lower()
+            or q_raw in em.get("body_text", "").lower()
+            or q_raw in em.get("id", "").lower()
+        ]
+        return matched[:limit]
