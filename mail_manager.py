@@ -790,112 +790,248 @@ async def handle_resend_webhook(request: Request):
 # WEB MANAGEMENT PORTAL HTML (GLASSMORPHISM)
 # ──────────────────────────────────────────────
 def render_login_html(error: str = "") -> str:
-    err_box = f'<div class="login-err">⚠️ {error}</div>' if error else ""
+    err_box = f'<div class="login-err"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span>{error}</span></div>' if error else ""
     return f"""<!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Đăng Nhập Cổng Email · support@aegixbot.xyz</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>AEGIX Email Gateway · Authentication</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
   <style>
+    :root {{
+      --bg: #050811;
+      --card-bg: rgba(13, 19, 36, 0.85);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-focus: #6366F1;
+      --primary: #6366F1;
+      --primary-hover: #4F46E5;
+      --cyan: #06B6D4;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+    }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
-      background: radial-gradient(circle at top, #1e1b4b, #090d16 60%);
-      color: #f8fafc;
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(1000px circle at 50% -20%, rgba(99, 102, 241, 0.2), transparent 60%),
+        radial-gradient(800px circle at 85% 90%, rgba(6, 182, 212, 0.12), transparent 50%),
+        radial-gradient(700px circle at 15% 85%, rgba(139, 92, 246, 0.15), transparent 50%);
+      color: var(--text);
       font-family: 'Inter', sans-serif;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 20px;
+      padding: 24px;
+      overflow: hidden;
+      position: relative;
     }}
-    .login-card {{
-      background: rgba(17, 24, 39, 0.85);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 20px;
-      padding: 40px;
+    body::before {{
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }}
+    .login-container {{
       width: 100%;
       max-width: 440px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-      text-align: center;
+      position: relative;
+      z-index: 10;
     }}
-    .logo {{
-      width: 64px;
-      height: 64px;
+    .login-card {{
+      background: var(--card-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 44px 38px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                  0 0 40px rgba(99, 102, 241, 0.15);
+      position: relative;
+      overflow: hidden;
+    }}
+    .login-card::after {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--primary), var(--cyan), transparent);
+    }}
+    .logo-badge {{
+      width: 68px;
+      height: 68px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }}
+    .logo-badge img {{
+      width: 100%;
+      height: 100%;
       border-radius: 50%;
-      margin: 0 auto 18px;
-      display: block;
-      border: 2px solid rgba(99, 102, 241, 0.6);
-      box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+      border: 2px solid rgba(99, 102, 241, 0.5);
+      box-shadow: 0 0 25px rgba(99, 102, 241, 0.4);
+      background: #080A10;
     }}
-    h1 {{ font-size: 22px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.02em; }}
-    p.sub {{ color: #94a3b8; font-size: 14px; margin-bottom: 28px; line-height: 1.5; }}
-    .login-err {{
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #fca5a5;
-      padding: 12px 16px;
-      border-radius: 10px;
+    .brand-title {{
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      text-align: center;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, #FFFFFF, #CBD5E1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }}
+    .brand-sub {{
       font-size: 13px;
-      margin-bottom: 20px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 30px;
+      line-height: 1.5;
+    }}
+    .brand-sub strong {{
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }}
+    .login-err {{
+      background: rgba(244, 63, 94, 0.12);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      color: #FECDD3;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      line-height: 1.4;
+    }}
+    .form-group {{
+      margin-bottom: 24px;
       text-align: left;
     }}
-    .input-group {{ margin-bottom: 24px; text-align: left; }}
-    label {{ display: block; font-size: 13px; font-weight: 500; color: #cbd5e1; margin-bottom: 8px; }}
-    input[type="password"] {{
+    .form-group label {{
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #CBD5E1;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }}
+    .input-wrapper input {{
       width: 100%;
-      background: #0b0f19;
-      border: 1px solid #2d3748;
-      padding: 13px 16px;
-      border-radius: 10px;
-      color: #ffffff;
+      background: rgba(7, 10, 20, 0.85);
+      border: 1px solid var(--border);
+      padding: 14px 18px;
+      border-radius: 12px;
+      color: #FFFFFF;
       font-size: 15px;
       outline: none;
-      transition: all 0.2s ease;
+      transition: all 0.25s ease;
+      font-family: inherit;
     }}
-    input[type="password"]:focus {{
-      border-color: #6366f1;
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+    .input-wrapper input:focus {{
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25),
+                  0 0 20px rgba(99, 102, 241, 0.15);
+      background: rgba(7, 10, 20, 1);
     }}
-    button.btn-submit {{
+    .btn-login {{
       width: 100%;
-      background: linear-gradient(135deg, #6366f1, #4f46e5);
-      color: #ffffff;
+      background: linear-gradient(135deg, #6366F1, #4F46E5);
+      color: #FFFFFF;
       border: none;
-      padding: 13px;
-      border-radius: 10px;
+      padding: 14px;
+      border-radius: 12px;
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+      letter-spacing: 0.01em;
       cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }}
-    button.btn-submit:hover {{
-      opacity: 0.95;
-      transform: translateY(-1px);
+    .btn-login:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(99, 102, 241, 0.6);
+      filter: brightness(1.08);
     }}
-    .footer-text {{ margin-top: 24px; font-size: 12px; color: #64748b; }}
+    .footer-badges {{
+      margin-top: 28px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }}
+    .badge-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 5px 10px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }}
   </style>
 </head>
 <body>
-  <div class="login-card">
-    <img src="https://aegixbot.xyz/static/aegix.png" alt="AEGIX" class="logo">
-    <h1>Cổng Quản Lý Email</h1>
-    <p class="sub">Hộp thư hỗ trợ <strong>{SUPPORT_EMAIL}</strong><br>Bảo mật bởi hệ thống AIClaw</p>
-    {err_box}
-    <form method="POST" action="/manage/login">
-      <div class="input-group">
-        <label for="password">Mật khẩu xác thực (Master Password)</label>
-        <input type="password" id="password" name="password" placeholder="Nhập mật khẩu quản trị..." required autofocus>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="logo-badge">
+        <img src="https://aegixbot.xyz/static/aegix.png" alt="AEGIX">
       </div>
-      <button type="submit" class="btn-submit">Mở Hộp Thư ➔</button>
-    </form>
-    <div class="footer-text">AEGIX Security Operations • Phiên bản 2.5</div>
+      <h1 class="brand-title">AEGIX Support Studio</h1>
+      <p class="brand-sub">Secure Mail Gateway &amp; Dispatcher<br><strong>{SUPPORT_EMAIL}</strong></p>
+
+      {err_box}
+
+      <form method="POST" action="/manage/login">
+        <div class="form-group">
+          <label for="password">Master Security Key</label>
+          <div class="input-wrapper">
+            <input type="password" id="password" name="password" placeholder="Enter master access password..." required autofocus>
+          </div>
+        </div>
+        <button type="submit" class="btn-login">
+          <span>Authenticate &amp; Open Inbox</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+      </form>
+
+      <div class="footer-badges">
+        <div class="badge-pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>256-Bit SSL</span>
+        </div>
+        <div class="badge-pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span>Zero-Log Session</span>
+        </div>
+      </div>
+    </div>
   </div>
 </body>
 </html>"""
+
 
 def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", error_msg: str = "") -> str:
     has_resend_key = bool(os.getenv("RESEND_API_KEY", RESEND_API_KEY).strip())
@@ -905,36 +1041,45 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     replied = sum(1 for e in emails if e.get("status") == "replied")
     user_replied = sum(1 for e in emails if e.get("status") == "user_replied")
 
-    key_badge = '<span class="status-pill green">🟢 Resend API Ready</span>' if has_resend_key else '<span class="status-pill yellow">🟠 Thiếu RESEND_API_KEY</span>'
-    ai_badge = '<span class="status-pill purple">✨ AI Auto-Draft Active</span>'
+    key_badge = '<span class="status-chip chip-green"><span class="dot"></span>Resend API Live</span>' if has_resend_key else '<span class="status-chip chip-amber"><span class="dot"></span>API Key Missing</span>'
+    ai_badge = '<span class="status-chip chip-purple"><span class="dot"></span>AI Neural Draft Active</span>'
 
     warning_banner = ""
     if not has_resend_key:
-        warning_banner = """
-        <div class="banner-warn">
-          <strong>⚠️ Chưa thiết lập RESEND_API_KEY:</strong> Bạn vẫn có thể nhận email và dùng AI soạn bản nháp bình thường. Để gửi email phản hồi, hãy đăng ký miễn phí tại <a href="https://resend.com/api-keys" target="_blank">resend.com/api-keys</a> và thêm biến <code>RESEND_API_KEY</code>.
+        warning_banner = f"""
+        <div class="glass-banner banner-warn">
+          <div class="banner-icon">⚠️</div>
+          <div>
+            <strong>Missing RESEND_API_KEY Configuration:</strong> Incoming emails and AI drafting work normally. To dispatch outbound replies to customers, please add <code>RESEND_API_KEY</code> to your environment from <a href="https://resend.com/api-keys" target="_blank" rel="noopener">resend.com/api-keys</a>.
+          </div>
         </div>
         """
 
     feedback_html = ""
     if success_msg:
-        feedback_html += f'<div class="banner-success">✅ {success_msg}</div>'
+        feedback_html += f'<div class="glass-banner banner-success"><div class="banner-icon">✅</div><div>{success_msg}</div></div>'
     if error_msg:
-        feedback_html += f'<div class="banner-error">❌ {error_msg}</div>'
+        feedback_html += f'<div class="glass-banner banner-danger"><div class="banner-icon">❌</div><div>{error_msg}</div></div>'
 
     # Build Email Cards HTML
     email_cards_html = ""
     if not emails:
-        email_cards_html = '<div class="empty-box">📭 Chưa có email nào được gửi đến support@aegixbot.xyz</div>'
+        email_cards_html = f'''
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          <h3>Your Inbox is Clean</h3>
+          <p>No support inquiries have been received yet for <strong>{SUPPORT_EMAIL}</strong>.<br>Send a test email to this address to see it appear here in real time!</p>
+        </div>
+        '''
     else:
         for em in emails:
             eid = em.get("id", "EM-???")
             tid = em.get("thread_id", eid)
             st = em.get("status", "unread")
             sender = em.get("sender", "Unknown")
-            subject = em.get("subject", "(Không có tiêu đề)")
+            subject = em.get("subject", "(No Subject)")
             created_at = em.get("created_at", "")
-            body = em.get("body_text") or em.get("body_html") or "(Nội dung trống)"
+            body = em.get("body_text") or em.get("body_html") or "(Empty email body)"
             ai_draft = em.get("ai_draft", "")
             ai_summary = em.get("ai_summary", "")
 
@@ -947,75 +1092,109 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
 
             has_att = len(att_list) > 0
 
+            # Badge Styling
             if st == "unread":
-                badge = '<span class="badge badge-unread">MỚI</span>'
+                badge = '<span class="status-badge badge-unread"><span class="pulse-dot"></span>NEW TICKET</span>'
             elif st == "user_replied":
-                badge = '<span class="badge badge-purple">KHÁCH ĐÃ REPLY</span>'
+                badge = '<span class="status-badge badge-replied"><span class="pulse-dot-purple"></span>CUSTOMER FOLLOW-UP</span>'
             elif st == "replied":
-                badge = '<span class="badge badge-green">ĐÃ TRẢ LỜI</span>'
+                badge = '<span class="status-badge badge-resolved">RESOLVED</span>'
             else:
-                badge = '<span class="badge badge-gray">ĐÃ ĐỌC</span>'
+                badge = '<span class="status-badge badge-read">READ</span>'
 
             # Clean display for body
             safe_body = body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            safe_ai_draft = ai_draft.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+            safe_ai_draft = ai_draft.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\\n", "<br>")
 
-            # Attachment pill badges
+            # Attachment Chips
             att_html = ""
             if att_list:
-                pills = "".join(f'<span class="att-pill">📎 {a.get("filename", "attachment")}</span>' for a in att_list)
-                att_html = f'<div class="att-container">{pills}</div>'
+                pills = "".join(f'<span class="att-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>{a.get("filename", "attachment")}</span>' for a in att_list)
+                att_html = f'<div class="att-wrapper">{pills}</div>'
 
-            # AI Summary container
+            # AI Summary banner
             ai_summary_html = ""
             if ai_summary:
-                ai_summary_html = f'<div class="ai-summary-tag">🤖 <strong>Tóm tắt AI:</strong> {ai_summary}</div>'
+                ai_summary_html = f'''
+                <div class="ai-summary-card">
+                  <div class="ai-summary-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C084FC" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    <span>AI Context Analysis</span>
+                  </div>
+                  <div class="ai-summary-text">{ai_summary}</div>
+                </div>
+                '''
 
-            # AI Draft preview block
+            # AI Pre-Draft Box
             ai_draft_block = ""
             if ai_draft:
-                ai_draft_block = f"""
-                <div class="ai-draft-box">
+                ai_draft_block = f'''
+                <div class="ai-draft-card">
                   <div class="ai-draft-header">
-                    <span>✨ Gợi ý câu trả lời từ AI (Đã sẵn sàng)</span>
-                    <button type="button" class="btn-use-ai" onclick="useAiDraft('{eid}')">📋 Điền vào form trả lời</button>
+                    <div class="ai-draft-title">
+                      <span class="sparkle-icon">✨</span>
+                      <span>AI Pre-Drafted Response (Ready to Dispatch)</span>
+                    </div>
+                    <button type="button" class="btn-insert-ai" onclick="useAiDraft('{eid}')">
+                      <span>Insert into Composer</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </button>
                   </div>
-                  <div class="ai-draft-content" id="aidraft-text-{eid}">{safe_ai_draft}</div>
+                  <div class="ai-draft-preview" id="aidraft-text-{eid}">{safe_ai_draft}</div>
                 </div>
-                """
+                '''
+
+            sender_initial = sender[0].upper() if sender else "U"
 
             email_cards_html += f"""
-            <div class="mail-item" id="item-{eid}" data-status="{st}" data-sender="{sender.lower()}" data-subject="{subject.lower()}" data-id="{eid.lower()}" data-has-att="{'1' if has_att else '0'}">
-              <div class="mail-header" onclick="toggleMail('{eid}')">
-                <div class="mail-title-group">
-                  {badge}
-                  <span class="mail-sender">{sender}</span>
-                  <span class="mail-id">#{eid}</span>
-                  {'<span class="att-icon">📎</span>' if has_att else ''}
+            <div class="ticket-card" id="item-{eid}" data-status="{st}" data-sender="{sender.lower()}" data-subject="{subject.lower()}" data-id="{eid.lower()}" data-has-att="{'1' if has_att else '0'}">
+              <div class="ticket-top" onclick="toggleMail('{eid}')">
+                <div class="sender-avatar">{sender_initial}</div>
+                <div class="ticket-info">
+                  <div class="ticket-meta-row">
+                    <span class="sender-email">{sender}</span>
+                    <span class="ticket-id">#{eid}</span>
+                    {badge}
+                    {'<span class="att-badge" title="Has attachments"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>' if has_att else ''}
+                  </div>
+                  <div class="ticket-subject">{subject}</div>
                 </div>
-                <div class="mail-date">{created_at}</div>
+                <div class="ticket-date-col">
+                  <span class="ticket-date">{created_at}</span>
+                  <div class="expand-icon" id="expand-icon-{eid}">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                  </div>
+                </div>
               </div>
 
-              <div class="mail-subject" onclick="toggleMail('{eid}')">{subject}</div>
               {ai_summary_html}
 
-              <div class="mail-body-container" id="body-{eid}">
-                <div class="mail-body-text">{safe_body}</div>
+              <div class="ticket-expansion" id="body-{eid}">
+                <div class="ticket-body-scroll">
+                  <div class="body-label">Email Message Content:</div>
+                  <div class="body-content">{safe_body}</div>
+                </div>
+
                 {att_html}
                 {ai_draft_block}
 
-                <div class="mail-actions">
-                  <button type="button" class="btn-reply-fill" onclick="prefillReply('{sender}', '{subject}', '{eid}')">
-                    ✍️ Soạn phản hồi
+                <div class="ticket-action-bar">
+                  <button type="button" class="btn-action-primary" onclick="prefillReply('{sender}', '{subject}', '{eid}')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a5 5 0 0 1 5 5v2"/><path d="M7 6l-4 4 4 4"/></svg>
+                    <span>Quick Reply</span>
                   </button>
-                  <button type="button" class="btn-view-thread" onclick="viewThread('{tid}')">
-                    💬 Lịch sử luồng (Thread)
+
+                  <button type="button" class="btn-action-thread" onclick="viewThread('{tid}')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>Conversation Thread</span>
                   </button>
-                  <form method="POST" action="/manage/status" style="display:inline;">
+
+                  <form method="POST" action="/manage/status" style="display:inline;margin-left:auto;">
                     <input type="hidden" name="email_id" value="{eid}">
                     <input type="hidden" name="status" value="{'read' if st != 'read' else 'unread'}">
-                    <button type="submit" class="btn-secondary-sm">
-                      {'Đánh dấu đã đọc' if st != 'read' else 'Đánh dấu chưa đọc'}
+                    <button type="submit" class="btn-action-secondary">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                      <span>{'Mark as Read' if st != 'read' else 'Mark as Unread'}</span>
                     </button>
                   </form>
                 </div>
@@ -1024,488 +1203,1080 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
             """
 
     return f"""<!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cổng Quản Trị Email · support@aegixbot.xyz</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <title>AEGIX Support Studio · Command Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {{
-      --bg: #07090e;
-      --card: #0f1422;
-      --card-hover: #141c30;
-      --border: #1e263d;
-      --primary: #6366f1;
-      --primary-hover: #4f46e5;
-      --accent-cyan: #38bdf8;
-      --accent-green: #22c55e;
-      --accent-purple: #a855f7;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
+      --bg: #050811;
+      --card-bg: rgba(13, 19, 36, 0.75);
+      --card-hover: rgba(18, 26, 48, 0.85);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(99, 102, 241, 0.4);
+      --primary: #6366F1;
+      --primary-hover: #4F46E5;
+      --cyan: #06B6D4;
+      --purple: #A855F7;
+      --green: #10B981;
+      --amber: #F59E0B;
+      --rose: #F43F5E;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-sub: #64748B;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
-      background: var(--bg);
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(1200px circle at 15% -10%, rgba(99, 102, 241, 0.15), transparent 60%),
+        radial-gradient(900px circle at 85% 10%, rgba(6, 182, 212, 0.12), transparent 50%),
+        radial-gradient(800px circle at 50% 90%, rgba(139, 92, 246, 0.10), transparent 50%);
       color: var(--text);
-      font-family: 'Inter', -apple-system, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       min-height: 100vh;
-      padding: 24px 20px;
+      padding: 24px 28px;
     }}
-    .container {{ max-width: 1280px; margin: 0 auto; }}
-
-    /* Header */
-    .header {{
+    .studio-container {{
+      max-width: 1440px;
+      margin: 0 auto;
+    }}
+    .studio-header {{
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 20px;
+      padding-bottom: 22px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 24px;
+      margin-bottom: 26px;
       flex-wrap: wrap;
+      gap: 18px;
+    }}
+    .brand-cluster {{
+      display: flex;
+      align-items: center;
       gap: 16px;
     }}
-    .brand {{ display: flex; align-items: center; gap: 14px; }}
-    .brand img {{
-      width: 44px;
-      height: 44px;
+    .brand-logo-frame img {{
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
-      border: 2px solid var(--primary);
-      box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+      border: 2px solid rgba(99, 102, 241, 0.6);
+      background: #080A10;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.35);
+      display: block;
     }}
-    .brand h1 {{ font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }}
-    .brand-sub {{ font-size: 13px; color: var(--text-muted); }}
-
-    .status-group {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
-    .status-pill {{
+    .brand-titles h1 {{
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #FFFFFF, #E2E8F0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }}
+    .brand-titles .tagline {{
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }}
+    .brand-titles .tagline strong {{
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }}
+    .header-actions {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .status-chip {{
       display: inline-flex;
       align-items: center;
+      gap: 6px;
       font-size: 12px;
       font-weight: 600;
-      padding: 6px 12px;
+      padding: 6px 14px;
       border-radius: 20px;
+      border: 1px solid transparent;
+      font-family: 'Outfit', sans-serif;
     }}
-    .status-pill.green {{ background: rgba(34, 197, 94, 0.15); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.3); }}
-    .status-pill.purple {{ background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }}
-    .status-pill.yellow {{ background: rgba(234, 179, 8, 0.15); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.3); }}
-    .btn-logout {{
+    .status-chip .dot {{
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }}
+    .chip-green {{
+      background: rgba(16, 185, 129, 0.12);
+      color: #6EE7B7;
+      border-color: rgba(16, 185, 129, 0.25);
+    }}
+    .chip-green .dot {{
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+    }}
+    .chip-purple {{
+      background: rgba(168, 85, 247, 0.12);
+      color: #D8B4FE;
+      border-color: rgba(168, 85, 247, 0.25);
+    }}
+    .chip-purple .dot {{
+      background: #A855F7;
+      box-shadow: 0 0 8px #A855F7;
+    }}
+    .chip-amber {{
+      background: rgba(245, 158, 11, 0.12);
+      color: #FCD34D;
+      border-color: rgba(245, 158, 11, 0.25);
+    }}
+    .chip-amber .dot {{
+      background: #F59E0B;
+    }}
+    .btn-nav {{
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--border);
       color: var(--text-muted);
-      padding: 7px 14px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-size: 12px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
       font-weight: 600;
+      text-decoration: none;
       transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
     }}
-    .btn-logout:hover {{ background: rgba(239, 68, 68, 0.15); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }}
-
-    /* Stat Cards */
-    .stat-row {{
+    .btn-nav:hover {{
+      background: rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+      border-color: rgba(255, 255, 255, 0.2);
+    }}
+    .btn-nav.btn-danger:hover {{
+      background: rgba(244, 63, 94, 0.15);
+      color: #FECDD3;
+      border-color: rgba(244, 63, 94, 0.3);
+    }}
+    .metrics-grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 16px;
       margin-bottom: 24px;
     }}
-    .stat-card {{
-      background: var(--card);
+    .metric-card {{
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 18px 20px;
+      border-radius: 18px;
+      padding: 20px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      transition: all 0.25s ease;
+    }}
+    .metric-card:hover {{
+      transform: translateY(-2px);
+      border-color: var(--border-hover);
+    }}
+    .metric-card .meta {{
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      gap: 4px;
     }}
-    .stat-card .num {{ font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }}
-    .stat-card .label {{ font-size: 13px; color: var(--text-muted); font-weight: 500; }}
-
-    /* Search & Filter Toolbar */
-    .toolbar {{
+    .metric-card .num {{
+      font-family: 'Outfit', sans-serif;
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }}
+    .metric-card .lbl {{
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }}
+    .metric-card .icon-box {{
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
       display: flex;
-      gap: 14px;
-      margin-bottom: 20px;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }}
+    .mc-cyan .num {{ color: var(--cyan); }}
+    .mc-cyan .icon-box {{ background: rgba(6, 182, 212, 0.12); color: var(--cyan); border: 1px solid rgba(6, 182, 212, 0.25); }}
+    .mc-purple .num {{ color: #C084FC; }}
+    .mc-purple .icon-box {{ background: rgba(168, 85, 247, 0.12); color: #C084FC; border: 1px solid rgba(168, 85, 247, 0.25); }}
+    .mc-green .num {{ color: #34D399; }}
+    .mc-green .icon-box {{ background: rgba(16, 185, 129, 0.12); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.25); }}
+    .mc-indigo .num {{ color: #818CF8; }}
+    .mc-indigo .icon-box {{ background: rgba(99, 102, 241, 0.12); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.25); }}
+    .command-toolbar {{
+      display: flex;
+      gap: 16px;
+      margin-bottom: 22px;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
     }}
-    .search-box {{
+    .search-wrapper {{
       flex: 1;
-      min-width: 280px;
+      min-width: 320px;
       position: relative;
     }}
-    .search-box input {{
+    .search-icon {{
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-sub);
+      pointer-events: none;
+    }}
+    .search-wrapper input {{
       width: 100%;
-      background: var(--card);
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
       border: 1px solid var(--border);
-      padding: 12px 18px;
-      border-radius: 10px;
-      color: #fff;
+      padding: 13px 44px 13px 46px;
+      border-radius: 14px;
+      color: #FFFFFF;
       font-size: 14px;
       outline: none;
-      transition: border-color 0.2s;
+      transition: all 0.2s ease;
+      font-family: inherit;
     }}
-    .search-box input:focus {{ border-color: var(--primary); }}
-
-    .filter-tabs {{ display: flex; gap: 8px; flex-wrap: wrap; }}
-    .tab-btn {{
-      background: var(--card);
+    .search-wrapper input:focus {{
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }}
+    .search-shortcut {{
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 2px 7px;
+      pointer-events: none;
+    }}
+    .filter-tabs {{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }}
+    .tab-pill {{
+      background: var(--card-bg);
       border: 1px solid var(--border);
       color: var(--text-muted);
       padding: 9px 16px;
-      border-radius: 10px;
+      border-radius: 12px;
       font-size: 13px;
       font-weight: 600;
+      font-family: 'Outfit', sans-serif;
       cursor: pointer;
       transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }}
-    .tab-btn.active, .tab-btn:hover {{
+    .tab-pill:hover {{
+      background: rgba(255, 255, 255, 0.06);
+      color: #FFFFFF;
+    }}
+    .tab-pill.active {{
       background: var(--primary);
-      color: #fff;
+      color: #FFFFFF;
       border-color: var(--primary);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
     }}
-
-    /* Layout: 2 Columns on desktop */
-    .content-grid {{
+    .workspace-grid {{
       display: grid;
       grid-template-columns: 1fr 440px;
       gap: 24px;
+      align-items: start;
     }}
-    @media (max-width: 980px) {{
-      .content-grid {{ grid-template-columns: 1fr; }}
+    @media (max-width: 1040px) {{
+      .workspace-grid {{
+        grid-template-columns: 1fr;
+      }}
     }}
-
-    /* Email Items List */
-    .mail-item {{
-      background: var(--card);
+    .ticket-card {{
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 16px;
       margin-bottom: 14px;
       overflow: hidden;
-      transition: all 0.2s;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     }}
-    .mail-item:hover {{ border-color: rgba(99, 102, 241, 0.4); background: var(--card-hover); }}
-    .mail-header {{
-      padding: 16px 20px 8px;
+    .ticket-card:hover {{
+      border-color: var(--border-hover);
+      background: var(--card-hover);
+    }}
+    .ticket-top {{
+      padding: 16px 20px;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
+      gap: 14px;
       cursor: pointer;
       user-select: none;
     }}
-    .mail-title-group {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
-    .mail-sender {{ font-weight: 700; font-size: 14px; color: #fff; }}
-    .mail-id {{ font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; }}
-    .mail-date {{ font-size: 12px; color: var(--text-muted); }}
-    .mail-subject {{
-      padding: 0 20px 14px;
+    .sender-avatar {{
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(6, 182, 212, 0.25));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }}
+    .ticket-info {{
+      flex: 1;
+      min-width: 0;
+    }}
+    .ticket-meta-row {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }}
+    .sender-email {{
+      font-size: 14px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }}
+    .ticket-id {{
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 2px 7px;
+      border-radius: 6px;
+    }}
+    .ticket-subject {{
       font-size: 15px;
       font-weight: 600;
-      color: #e2e8f0;
-      cursor: pointer;
+      color: #E2E8F0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }}
-
-    .ai-summary-tag {{
-      margin: 0 20px 12px;
-      background: rgba(168, 85, 247, 0.12);
-      border: 1px solid rgba(168, 85, 247, 0.25);
-      border-radius: 8px;
-      padding: 8px 12px;
+    .ticket-date-col {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }}
+    .ticket-date {{
+      font-size: 12px;
+      color: var(--text-sub);
+      font-family: 'JetBrains Mono', monospace;
+    }}
+    .expand-icon {{
+      color: var(--text-sub);
+      transition: transform 0.25s ease;
+      display: flex;
+      align-items: center;
+    }}
+    .status-badge {{
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 800;
+      font-family: 'Outfit', sans-serif;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }}
+    .badge-unread {{
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--cyan);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+    }}
+    .badge-replied {{
+      background: rgba(168, 85, 247, 0.15);
+      color: #C084FC;
+      border: 1px solid rgba(168, 85, 247, 0.35);
+    }}
+    .badge-resolved {{
+      background: rgba(16, 185, 129, 0.15);
+      color: #34D399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }}
+    .badge-read {{
+      background: rgba(148, 163, 184, 0.10);
+      color: var(--text-muted);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }}
+    .pulse-dot {{
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 6px var(--cyan);
+      animation: pulse 1.8s infinite;
+    }}
+    .pulse-dot-purple {{
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #C084FC;
+      box-shadow: 0 0 6px #C084FC;
+      animation: pulse 1.8s infinite;
+    }}
+    @keyframes pulse {{
+      0%, 100% {{ opacity: 1; transform: scale(1); }}
+      50% {{ opacity: 0.4; transform: scale(0.85); }}
+    }}
+    .ai-summary-card {{
+      margin: 0 20px 14px;
+      background: rgba(168, 85, 247, 0.08);
+      border: 1px solid rgba(168, 85, 247, 0.2);
+      border-radius: 12px;
+      padding: 10px 14px;
+    }}
+    .ai-summary-label {{
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #C084FC;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+      font-family: 'Outfit', sans-serif;
+    }}
+    .ai-summary-text {{
       font-size: 13px;
-      color: #e9d5ff;
+      color: #E9D5FF;
+      line-height: 1.5;
     }}
-
-    .mail-body-container {{
+    .ticket-expansion {{
       display: none;
-      padding: 18px 20px;
+      padding: 20px;
       border-top: 1px solid var(--border);
-      background: rgba(7, 9, 14, 0.6);
+      background: rgba(5, 8, 17, 0.85);
     }}
-    .mail-body-text {{
+    .ticket-body-scroll {{
+      margin-bottom: 16px;
+    }}
+    .body-label {{
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }}
+    .body-content {{
       font-size: 14px;
-      line-height: 1.6;
-      color: #cbd5e1;
+      line-height: 1.65;
+      color: #CBD5E1;
       white-space: pre-wrap;
       word-break: break-word;
-      margin-bottom: 16px;
-      max-height: 400px;
-      overflow-y: auto;
-      padding-right: 6px;
-    }}
-
-    /* AI Draft Box */
-    .ai-draft-box {{
-      background: rgba(99, 102, 241, 0.08);
-      border: 1px solid rgba(99, 102, 241, 0.25);
-      border-radius: 10px;
+      background: rgba(13, 19, 36, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 12px;
       padding: 14px 16px;
-      margin-bottom: 16px;
+      max-height: 350px;
+      overflow-y: auto;
+    }}
+    .ai-draft-card {{
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 18px;
     }}
     .ai-draft-header {{
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }}
+    .ai-draft-title {{
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Outfit', sans-serif;
       font-size: 13px;
       font-weight: 700;
-      color: #a5b4fc;
+      color: #A5B4FC;
     }}
-    .btn-use-ai {{
-      background: var(--primary);
+    .btn-insert-ai {{
+      background: linear-gradient(135deg, #6366F1, #4F46E5);
       border: none;
-      color: #fff;
-      padding: 4px 10px;
-      border-radius: 6px;
+      color: #FFFFFF;
+      padding: 6px 12px;
+      border-radius: 8px;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
     }}
-    .ai-draft-content {{
+    .btn-insert-ai:hover {{
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }}
+    .ai-draft-preview {{
       font-size: 13px;
       line-height: 1.6;
-      color: #e0e7ff;
-      max-height: 200px;
+      color: #E0E7FF;
+      background: rgba(7, 10, 20, 0.6);
+      border-radius: 10px;
+      padding: 12px 14px;
+      max-height: 220px;
       overflow-y: auto;
+      border: 1px solid rgba(99, 102, 241, 0.15);
     }}
-
-    /* Attachments */
-    .att-container {{ display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }}
-    .att-pill {{
-      background: rgba(56, 189, 248, 0.12);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      color: #7dd3fc;
+    .att-wrapper {{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }}
+    .att-chip {{
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      color: #67E8F9;
       font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 6px;
+      font-weight: 500;
+      padding: 5px 12px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }}
-
-    .mail-actions {{ display: flex; gap: 10px; flex-wrap: wrap; }}
-    .btn-reply-fill {{
+    .att-badge {{
+      color: var(--cyan);
+      display: inline-flex;
+      align-items: center;
+    }}
+    .ticket-action-bar {{
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding-top: 6px;
+    }}
+    .btn-action-primary {{
       background: var(--primary);
       border: none;
-      color: #fff;
-      padding: 8px 16px;
-      border-radius: 8px;
+      color: #FFFFFF;
+      padding: 9px 16px;
+      border-radius: 10px;
       font-size: 13px;
       font-weight: 600;
+      font-family: 'Outfit', sans-serif;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
     }}
-    .btn-view-thread {{
-      background: rgba(168, 85, 247, 0.2);
-      border: 1px solid rgba(168, 85, 247, 0.35);
-      color: #e9d5ff;
-      padding: 8px 14px;
-      border-radius: 8px;
+    .btn-action-primary:hover {{
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }}
+    .btn-action-thread {{
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      color: #E9D5FF;
+      padding: 9px 16px;
+      border-radius: 10px;
       font-size: 13px;
       font-weight: 600;
+      font-family: 'Outfit', sans-serif;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
     }}
-    .btn-secondary-sm {{
-      background: rgba(255, 255, 255, 0.06);
+    .btn-action-thread:hover {{
+      background: rgba(168, 85, 247, 0.25);
+    }}
+    .btn-action-secondary {{
+      background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--border);
       color: var(--text-muted);
-      padding: 8px 14px;
-      border-radius: 8px;
+      padding: 9px 14px;
+      border-radius: 10px;
       font-size: 13px;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
     }}
-
-    /* Badges */
-    .badge {{ font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.04em; text-transform: uppercase; }}
-    .badge-unread {{ background: rgba(56, 189, 248, 0.18); color: var(--accent-cyan); border: 1px solid rgba(56, 189, 248, 0.4); }}
-    .badge-purple {{ background: rgba(168, 85, 247, 0.18); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); }}
-    .badge-green {{ background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }}
-    .badge-gray {{ background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }}
-
-    /* Send Form */
-    .reply-pane {{
-      background: var(--card);
+    .btn-action-secondary:hover {{
+      background: rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+    }}
+    .studio-pane {{
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 20px;
       padding: 24px;
-      height: fit-content;
       position: sticky;
       top: 24px;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
+      position: relative;
+      overflow: hidden;
     }}
-    .pane-title {{ font-size: 17px; font-weight: 700; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }}
-    .form-group {{ margin-bottom: 16px; }}
-    .form-group label {{ display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }}
-    .form-group input, .form-group textarea {{
+    .studio-pane::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--primary), var(--cyan));
+    }}
+    .pane-header {{
+      margin-bottom: 20px;
+    }}
+    .pane-header h2 {{
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .pane-header .sub {{
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }}
+    .studio-form .form-group {{
+      margin-bottom: 16px;
+    }}
+    .studio-form label {{
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      color: #CBD5E1;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }}
+    .studio-form input, .studio-form textarea {{
       width: 100%;
-      background: #090d16;
+      background: rgba(7, 10, 20, 0.85);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 14px;
-      color: #fff;
+      border-radius: 10px;
+      padding: 11px 14px;
+      color: #FFFFFF;
       font-size: 14px;
       font-family: inherit;
       outline: none;
+      transition: all 0.2s;
     }}
-    .form-group input:focus, .form-group textarea:focus {{ border-color: var(--primary); }}
-    .btn-send-main {{
-      width: 100%;
-      background: linear-gradient(135deg, var(--primary), #4338ca);
-      border: none;
-      color: #fff;
-      padding: 12px;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 700;
+    .studio-form input:focus, .studio-form textarea:focus {{
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+      background: rgba(7, 10, 20, 1);
+    }}
+    .ai-helpers-bar {{
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }}
+    .chip-helper {{
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      color: #A5B4FC;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 9px;
+      border-radius: 6px;
       cursor: pointer;
       transition: all 0.2s;
     }}
-    .btn-send-main:hover {{ opacity: 0.95; transform: translateY(-1px); }}
-
-    /* Thread Modal */
-    .modal-overlay {{
+    .chip-helper:hover {{
+      background: rgba(99, 102, 241, 0.25);
+      color: #FFFFFF;
+    }}
+    .btn-send-dispatch {{
+      width: 100%;
+      background: linear-gradient(135deg, var(--primary), #4338CA);
+      color: #FFFFFF;
+      border: none;
+      padding: 13px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }}
+    .btn-send-dispatch:hover {{
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+    }}
+    .modal-backdrop {{
       display: none;
       position: fixed;
-      top:0; left:0; right:0; bottom:0;
-      background: rgba(0,0,0,0.75);
-      backdrop-filter: blur(8px);
-      z-index: 9999;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 99999;
       align-items: center;
       justify-content: center;
       padding: 20px;
     }}
-    .modal-card {{
-      background: #0f1422;
+    .timeline-window {{
+      background: #0D1324;
       border: 1px solid var(--border);
-      border-radius: 16px;
+      border-radius: 20px;
       width: 100%;
-      max-width: 680px;
+      max-width: 720px;
       max-height: 85vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
     }}
-    .modal-header {{
+    .window-header {{
       padding: 20px 24px;
       border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
+      background: rgba(255, 255, 255, 0.02);
     }}
-    .modal-header h3 {{ font-size: 16px; font-weight: 700; }}
-    .btn-close {{ background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; }}
-    .modal-body {{ padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }}
-    .timeline-msg {{
-      padding: 14px 18px;
+    .window-header h3 {{
+      font-family: 'Outfit', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .btn-window-close {{
+      background: rgba(255, 255, 255, 0.05);
+      border: none;
+      color: var(--text-muted);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.2s;
+    }}
+    .btn-window-close:hover {{
+      background: rgba(255, 255, 255, 0.15);
+      color: #FFFFFF;
+    }}
+    .timeline-stream {{
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }}
+    .chat-bubble {{
+      padding: 16px 18px;
+      border-radius: 14px;
+      font-size: 13.5px;
+      line-height: 1.6;
+      max-width: 88%;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }}
+    .chat-bubble.inbound {{
+      background: #111827;
+      border: 1px solid #1F2937;
+      color: #E2E8F0;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }}
+    .chat-bubble.outbound {{
+      background: linear-gradient(135deg, #312E81, #1E1B4B);
+      border: 1px solid #4338CA;
+      color: #F8FAFC;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }}
+    .bubble-author {{
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      opacity: 0.8;
+    }}
+    .toast-box {{
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: rgba(16, 185, 129, 0.95);
+      color: #FFFFFF;
+      padding: 12px 20px;
       border-radius: 12px;
       font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 999999;
+      animation: slideUp 0.3s ease;
+    }}
+    @keyframes slideUp {{
+      from {{ transform: translateY(20px); opacity: 0; }}
+      to {{ transform: translateY(0); opacity: 1; }}
+    }}
+    .glass-banner {{
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 22px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+    }}
+    .banner-warn {{
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #FEF08A;
+    }}
+    .banner-success {{
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #A7F3D0;
+    }}
+    .banner-danger {{
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      color: #FECDD3;
+    }}
+    .empty-state {{
+      padding: 60px 20px;
+      text-align: center;
+      background: var(--card-bg);
+      border: 1px dashed var(--border);
+      border-radius: 18px;
+    }}
+    .empty-icon {{
+      font-size: 40px;
+      margin-bottom: 12px;
+    }}
+    .empty-state h3 {{
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }}
+    .empty-state p {{
+      font-size: 14px;
+      color: var(--text-muted);
       line-height: 1.6;
     }}
-    .timeline-msg.inbound {{ background: #131b2e; border: 1px solid #1e293b; color: #e2e8f0; align-self: flex-start; max-width: 90%; }}
-    .timeline-msg.outbound {{ background: #2e1065; border: 1px solid #4c1d95; color: #f5f3ff; align-self: flex-end; max-width: 90%; }}
-    .timeline-meta {{ font-size: 11px; opacity: 0.7; margin-bottom: 6px; }}
-
-    /* Banners */
-    .banner-warn {{ background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.3); color: #fef08a; padding: 14px 20px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; }}
-    .banner-success {{ background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #86efac; padding: 14px 20px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; }}
-    .banner-error {{ background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; padding: 14px 20px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; }}
-    .empty-box {{ padding: 60px 20px; text-align: center; color: var(--text-muted); font-size: 15px; background: var(--card); border: 1px dashed var(--border); border-radius: 14px; }}
   </style>
 </head>
 <body>
-  <div class="container">
-    <!-- Header -->
-    <div class="header">
-      <div class="brand">
-        <img src="https://aegixbot.xyz/static/aegix.png" alt="AEGIX">
-        <div>
-          <h1>Hộp Thư Quản Trị {SUPPORT_EMAIL}</h1>
-          <div class="brand-sub">Trung Tâm Phản Hồi & Hỗ Trợ Khách Hàng AEGIX • AIClaw</div>
+  <div class="studio-container">
+    <header class="studio-header">
+      <div class="brand-cluster">
+        <div class="brand-logo-frame">
+          <img src="https://aegixbot.xyz/static/aegix.png" alt="AEGIX">
+        </div>
+        <div class="brand-titles">
+          <h1>AEGIX Support Studio <span style="font-size:12px;font-weight:700;background:rgba(99,102,241,0.2);color:#A5B4FC;padding:2px 8px;border-radius:6px;border:1px solid rgba(99,102,241,0.3);">v2.5 Enterprise</span></h1>
+          <div class="tagline">Official Mail Gateway &bull; <strong>{SUPPORT_EMAIL}</strong></div>
         </div>
       </div>
-      <div class="status-group">
+
+      <div class="header-actions">
         {key_badge}
         {ai_badge}
-        <a href="/manage/logout" class="btn-logout">Đăng Xuất</a>
+        <a href="https://aegixbot.xyz" target="_blank" rel="noopener" class="btn-nav">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span>aegixbot.xyz</span>
+        </a>
+        <button type="button" class="btn-nav" onclick="window.location.reload()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <span>Refresh</span>
+        </button>
+        <a href="/manage/logout" class="btn-nav btn-danger">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          <span>Sign Out</span>
+        </a>
       </div>
-    </div>
+    </header>
 
     {warning_banner}
     {feedback_html}
 
-    <!-- Stat Row -->
-    <div class="stat-row">
-      <div class="stat-card">
-        <div class="num" style="color: var(--accent-cyan);">{unread}</div>
-        <div class="label">Thư mới chưa đọc</div>
+    <div class="metrics-grid">
+      <div class="metric-card mc-cyan">
+        <div class="meta">
+          <div class="num">{unread}</div>
+          <div class="lbl">New Inbound</div>
+        </div>
+        <div class="icon-box">📬</div>
       </div>
-      <div class="stat-card">
-        <div class="num" style="color: var(--accent-purple);">{user_replied}</div>
-        <div class="label">Khách đã phản hồi (Follow-up)</div>
+
+      <div class="metric-card mc-purple">
+        <div class="meta">
+          <div class="num">{user_replied}</div>
+          <div class="lbl">Customer Follow-ups</div>
+        </div>
+        <div class="icon-box">💬</div>
       </div>
-      <div class="stat-card">
-        <div class="num" style="color: var(--accent-green);">{replied}</div>
-        <div class="label">Đã gửi câu trả lời</div>
+
+      <div class="metric-card mc-green">
+        <div class="meta">
+          <div class="num">{replied}</div>
+          <div class="lbl">Resolved &amp; Dispatched</div>
+        </div>
+        <div class="icon-box">🛡️</div>
       </div>
-      <div class="stat-card">
-        <div class="num" style="color: #fff;">{total}</div>
-        <div class="label">Tổng số thư trong hệ thống</div>
+
+      <div class="metric-card mc-indigo">
+        <div class="meta">
+          <div class="num">{total}</div>
+          <div class="lbl">Total Support Tickets</div>
+        </div>
+        <div class="icon-box">📊</div>
       </div>
     </div>
 
-    <!-- Toolbar -->
-    <div class="toolbar">
-      <div class="search-box">
-        <input type="text" id="mailSearch" placeholder="🔍 Tìm kiếm theo email người gửi, tiêu đề, mã thư..." onkeyup="filterMails()">
+    <div class="command-toolbar">
+      <div class="search-wrapper">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="mailSearch" placeholder="Filter tickets by sender email, subject, ID, or keyword..." onkeyup="filterMails()">
+        <span class="search-shortcut">/</span>
       </div>
+
       <div class="filter-tabs">
-        <button class="tab-btn active" onclick="setFilter('all', this)">Tất cả ({total})</button>
-        <button class="tab-btn" onclick="setFilter('unread', this)">Mới ({unread})</button>
-        <button class="tab-btn" onclick="setFilter('user_replied', this)">Khách reply ({user_replied})</button>
-        <button class="tab-btn" onclick="setFilter('replied', this)">Đã trả lời ({replied})</button>
-        <button class="tab-btn" onclick="setFilter('att', this)">Có đính kèm 📎</button>
+        <button class="tab-pill active" onclick="setFilter('all', this)">All Tickets ({total})</button>
+        <button class="tab-pill" onclick="setFilter('unread', this)">New ({unread})</button>
+        <button class="tab-pill" onclick="setFilter('user_replied', this)">Follow-ups ({user_replied})</button>
+        <button class="tab-pill" onclick="setFilter('replied', this)">Resolved ({replied})</button>
+        <button class="tab-pill" onclick="setFilter('att', this)">Attachments 📎</button>
       </div>
     </div>
 
-    <!-- Content Grid -->
-    <div class="content-grid">
-      <!-- Left: Email Cards List -->
-      <div id="emailList">
+    <div class="workspace-grid">
+      <div id="ticketStream">
         {email_cards_html}
       </div>
 
-      <!-- Right: Send Reply Composer -->
-      <div class="reply-pane">
-        <div class="pane-title">
-          <span>✍️ Soạn Thư Trực Tiếp</span>
-          <span style="font-size:12px;color:var(--text-muted);">qua Resend</span>
+      <div class="studio-pane">
+        <div class="pane-header">
+          <h2>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <span>Response Studio</span>
+          </h2>
+          <div class="sub">Dispatched officially via Resend Cloud API</div>
         </div>
-        <form method="POST" action="/manage/send">
+
+        <form method="POST" action="/manage/send" class="studio-form" id="replyForm">
           <div class="form-group">
-            <label for="recipient">Người nhận (To)</label>
-            <input type="email" id="recipient" name="recipient" placeholder="customer@example.com" required>
+            <label for="recipient">Customer Recipient (To)</label>
+            <input type="email" id="recipient" name="recipient" placeholder="client@domain.com" required>
           </div>
+
           <div class="form-group">
-            <label for="subject">Tiêu đề (Subject)</label>
-            <input type="text" id="subject" name="subject" placeholder="Re: Tiêu đề yêu cầu hỗ trợ" required>
+            <label for="subject">Email Subject</label>
+            <input type="text" id="subject" name="subject" placeholder="Re: Support Ticket..." required>
           </div>
+
           <div class="form-group">
-            <label for="body">Nội dung thư phản hồi</label>
-            <textarea id="body" name="body" rows="11" placeholder="Nhập nội dung thư phản hồi tại đây hoặc nhấn '✍️ Soạn phản hồi' từ email khách hàng..." required></textarea>
+            <label for="body">
+              <span>Official Message Body</span>
+              <span id="charCount" style="font-family:'JetBrains Mono',monospace;color:var(--text-sub);font-size:10px;">0 chars</span>
+            </label>
+            <textarea id="body" name="body" rows="12" placeholder="Write your professional response, or click 'Insert into Composer' from any ticket above..." required oninput="updateCharCount()"></textarea>
           </div>
-          <button type="submit" class="btn-send-main">Gửi Email Phản Hồi Ngay 🚀</button>
+
+          <div class="ai-helpers-bar">
+            <span class="chip-helper" onclick="insertSnippet('greeting')">+ Add Greeting</span>
+            <span class="chip-helper" onclick="insertSnippet('server_id')">+ Request Server ID</span>
+            <span class="chip-helper" onclick="insertSnippet('logs')">+ Request Logs</span>
+            <span class="chip-helper" onclick="insertSnippet('signoff')">+ Standard Sign-off</span>
+          </div>
+
+          <button type="submit" class="btn-send-dispatch">
+            <span>Dispatch Response via Resend</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
         </form>
       </div>
     </div>
   </div>
 
-  <!-- Thread History Modal -->
-  <div class="modal-overlay" id="threadModal" onclick="closeThreadModal(event)">
-    <div class="modal-card" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3 id="modalThreadTitle">💬 Lịch sử luồng trao đổi (Thread)</h3>
-        <button class="btn-close" onclick="closeThreadModal()">&times;</button>
+  <div class="modal-backdrop" id="threadModal" onclick="closeThreadModal(event)">
+    <div class="timeline-window" onclick="event.stopPropagation()">
+      <div class="window-header">
+        <h3 id="modalThreadTitle">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Conversation History Timeline</span>
+        </h3>
+        <button class="btn-window-close" onclick="closeThreadModal()">&times;</button>
       </div>
-      <div class="modal-body" id="modalThreadContent">
-        <div style="text-align:center;color:var(--text-muted);">Đang tải lịch sử...</div>
+      <div class="timeline-stream" id="modalThreadContent">
+        <div style="text-align:center;padding:30px;color:var(--text-muted);">Loading conversation...</div>
       </div>
     </div>
+  </div>
+
+  <div class="toast-box" id="toastBox">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span id="toastMsg">Action completed successfully</span>
   </div>
 
   <script>
@@ -1513,8 +2284,13 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
 
     function toggleMail(id) {{
       const el = document.getElementById('body-' + id);
+      const icon = document.getElementById('expand-icon-' + id);
       if (!el) return;
-      el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+      const isBlock = (el.style.display === 'block');
+      el.style.display = isBlock ? 'none' : 'block';
+      if (icon) {{
+        icon.style.transform = isBlock ? 'rotate(0deg)' : 'rotate(180deg)';
+      }}
     }}
 
     function prefillReply(sender, subject, eid) {{
@@ -1522,34 +2298,61 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       const subEl = document.getElementById('subject');
       subEl.value = subject.toLowerCase().startsWith('re:') ? subject : 'Re: ' + subject;
 
-      // If AI draft text exists in the item, use it
       const aiDraftEl = document.getElementById('aidraft-text-' + eid);
       if (aiDraftEl && aiDraftEl.innerText.trim()) {{
         document.getElementById('body').value = aiDraftEl.innerText.trim();
       }} else {{
         document.getElementById('body').focus();
       }}
-      window.scrollTo({{ top: document.querySelector('.reply-pane').offsetTop - 20, behavior: 'smooth' }});
+      updateCharCount();
+      showToast('Prefilled recipient & subject in Response Studio');
+      window.scrollTo({{ top: document.querySelector('.studio-pane').offsetTop - 20, behavior: 'smooth' }});
     }}
 
     function useAiDraft(eid) {{
       const el = document.getElementById('aidraft-text-' + eid);
       if (el) {{
         document.getElementById('body').value = el.innerText.trim();
-        window.scrollTo({{ top: document.querySelector('.reply-pane').offsetTop - 20, behavior: 'smooth' }});
+        updateCharCount();
+        showToast('✨ AI draft inserted into composer!');
+        window.scrollTo({{ top: document.querySelector('.studio-pane').offsetTop - 20, behavior: 'smooth' }});
       }}
+    }}
+
+    function updateCharCount() {{
+      const val = document.getElementById('body').value;
+      const counter = document.getElementById('charCount');
+      if (counter) counter.innerText = val.length + ' chars';
+    }}
+
+    function insertSnippet(type) {{
+      const bodyEl = document.getElementById('body');
+      let snippet = '';
+      if (type === 'greeting') {{
+        snippet = 'Hello,\\n\\nThank you for reaching out to AEGIX Support.\\n';
+      }} else if (type === 'server_id') {{
+        snippet = '\\nCould you please provide your Discord Server ID (Guild ID) so our engineering team can inspect the audit telemetry?\\n';
+      }} else if (type === 'logs') {{
+        snippet = '\\nIf possible, please share any console logs or screenshots displaying the error code.\\n';
+      }} else if (type === 'signoff') {{
+        snippet = '\\nBest regards,\\nAEGIX Support & Threat Intelligence Team\\nsupport@aegixbot.xyz | https://aegixbot.xyz\\n';
+      }}
+      bodyEl.value += snippet;
+      updateCharCount();
+      showToast('Snippet appended to composer');
+      bodyEl.focus();
     }}
 
     function setFilter(type, btn) {{
       currentFilter = type;
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pill').forEach(b => b.classList.remove('active'));
       if (btn) btn.classList.add('active');
       filterMails();
     }}
 
     function filterMails() {{
       const q = document.getElementById('mailSearch').value.toLowerCase().trim();
-      const items = document.querySelectorAll('.mail-item');
+      const items = document.querySelectorAll('.ticket-card');
 
       items.forEach(item => {{
         const st = item.getAttribute('data-status');
@@ -1558,13 +2361,11 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         const eid = item.getAttribute('data-id');
         const hasAtt = item.getAttribute('data-has-att') === '1';
 
-        // Filter tab match
         let matchTab = false;
         if (currentFilter === 'all') matchTab = true;
         else if (currentFilter === 'att') matchTab = hasAtt;
         else matchTab = (st === currentFilter);
 
-        // Search text match
         let matchText = true;
         if (q) {{
           matchText = s.includes(q) || sub.includes(q) || eid.includes(q);
@@ -1578,7 +2379,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       const modal = document.getElementById('threadModal');
       const content = document.getElementById('modalThreadContent');
       modal.style.display = 'flex';
-      content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">⏳ Đang tải toàn bộ luồng hội thoại...</div>';
+      content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);"><div style="margin-top:10px;">Loading complete conversation thread...</div></div>';
 
       try {{
         const res = await fetch('/manage/api/thread/' + tid);
@@ -1588,34 +2389,56 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
           data.thread.forEach(msg => {{
             const isOut = msg.is_reply === 1;
             const cls = isOut ? 'outbound' : 'inbound';
-            const author = isOut ? '🛡️ Ban Quản Trị AEGIX (' + msg.sender + ')' : '👤 Khách Hàng (' + msg.sender + ')';
+            const author = isOut ? '🛡️ AEGIX Support Team' : '👤 ' + msg.sender;
             html += `
-              <div class="timeline-msg ${{cls}}">
-                <div class="timeline-meta">${{author}} • ${{msg.created_at}}</div>
-                <div style="font-weight:600;margin-bottom:4px;">${{msg.subject}}</div>
-                <div style="white-space:pre-wrap;">${{msg.body_text || msg.body_html || '(Không có nội dung)'}}</div>
+              <div class="chat-bubble ${{cls}}">
+                <div class="bubble-author">
+                  <span>${{author}}</span>
+                  <span>${{msg.created_at}}</span>
+                </div>
+                <div style="font-weight:700;margin-bottom:6px;font-family:'Outfit',sans-serif;">${{msg.subject}}</div>
+                <div style="white-space:pre-wrap;">${{msg.body_text || msg.body_html || '(Empty content)'}}</div>
               </div>
             `;
           }});
           content.innerHTML = html;
         }} else {{
-          content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Không tìm thấy thêm tin nhắn nào trong luồng này.</div>';
+          content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">No further messages found for this thread.</div>';
         }}
       }} catch (e) {{
-        content.innerHTML = '<div style="color:#f87171;text-align:center;">Lỗi khi tải dữ liệu luồng: ' + e.message + '</div>';
+        content.innerHTML = '<div style="color:#F43F5E;text-align:center;padding:30px;">Error loading thread: ' + e.message + '</div>';
       }}
     }}
 
-    function closeThreadModal() {{
-      document.getElementById('threadModal').style.display = 'none';
+    function closeThreadModal(e) {{
+      if (!e || e.target.id === 'threadModal' || e.target.classList.contains('btn-window-close')) {{
+        document.getElementById('threadModal').style.display = 'none';
+      }}
     }}
+
+    function showToast(msg) {{
+      const t = document.getElementById('toastBox');
+      const tm = document.getElementById('toastMsg');
+      if (t && tm) {{
+        tm.innerText = msg;
+        t.style.display = 'flex';
+        setTimeout(() => {{ t.style.display = 'none'; }}, 3000);
+      }}
+    }}
+
+    document.addEventListener('keydown', (e) => {{
+      if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {{
+        e.preventDefault();
+        document.getElementById('mailSearch').focus();
+      }}
+      if (e.key === 'Escape') {{
+        document.getElementById('threadModal').style.display = 'none';
+      }}
+    }});
   </script>
 </body>
 </html>"""
 
-# ──────────────────────────────────────────────
-# WEB MANAGEMENT PORTAL API ROUTES
-# ──────────────────────────────────────────────
 @mail_router.get("/manage", response_class=HTMLResponse)
 async def manage_portal(request: Request, msg: str = "", err: str = ""):
     """Protected web management interface for support emails."""
