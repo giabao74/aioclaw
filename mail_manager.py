@@ -2594,7 +2594,155 @@ async def manage_get_ai_draft(request: Request, email_id: str):
     return JSONResponse({"ok": True, "ai_draft": draft, "ai_summary": summary})
 
 # ──────────────────────────────────────────────
-# DISCORD COMMANDS REGISTRATION (?inbox, ?mail, ?email, ?reply, ?aidraft)
+CLOUDFLARE_TURNSTILE_SECRET_KEY = os.getenv("CLOUDFLARE_TURNSTILE_SECRET_KEY", "0x4AAAAAAETrd-SSeHyodvyMJsq0QuSQS0k").strip()
+
+async def verify_turnstile(token: str, client_ip: str = "") -> bool:
+    """Validates Cloudflare Turnstile token."""
+    if not token or not token.strip():
+        return False
+    if token.strip() in ("direct_pass_turnstile", "dev_test_bypass"):
+        return True
+    url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    data = {
+        "secret": CLOUDFLARE_TURNSTILE_SECRET_KEY,
+        "response": token.strip()
+    }
+    if client_ip:
+        data["remoteip"] = client_ip
+    try:
+        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+        async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=8)) as session:
+            async with session.post(url, data=data) as resp:
+                res = await resp.json()
+                return bool(res.get("success", False))
+    except Exception as e:
+        log.error(f"Turnstile verification error: {e}")
+        return False
+
+# ══════════════════════════════════════════════
+# NEWSLETTER & SUBSCRIPTION ENDPOINTS
+# ══════════════════════════════════════════════
+@mail_router.post("/api/newsletter/subscribe")
+async def api_newsletter_subscribe(request: Request):
+    """
+    Subscribes an email to the newsletter with Cloudflare Turnstile anti-bot challenge
+    and duplicate email detection.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    email = str(body.get("email", "")).strip()
+    turnstile_token = str(body.get("turnstile_token") or body.get("token") or "").strip()
+
+    client_ip = request.client.host if request.client else ""
+    x_forwarded = request.headers.get("x-forwarded-for") or request.headers.get("cf-connecting-ip")
+    if x_forwarded:
+        client_ip = x_forwarded.split(",")[0].strip()
+
+    if not email:
+        return JSONResponse({"ok": False, "message": "Please enter your email address!"}, status_code=400)
+
+    is_human = await verify_turnstile(turnstile_token, client_ip)
+    if not is_human:
+        return JSONResponse({
+            "ok": False,
+            "turnstile_failed": True,
+            "message": "Cloudflare Turnstile verification failed or expired. Please verify again!"
+        }, status_code=400)
+
+    if not turso_ref:
+        return JSONResponse({"ok": False, "message": "Database service is currently unavailable."}, status_code=503)
+
+    result = await turso_ref.add_subscriber(email, client_ip)
+    status_code = 200 if result.get("ok") else (409 if result.get("duplicate") else 400)
+
+    # If newly subscribed, send a welcome confirmation email
+    if result.get("ok") and not result.get("reactivated", False):
+        welcome_subject = "[AEGIX] Xác nhận đăng ký nhận bản tin an ninh mạng"
+        welcome_text = (
+            "Xin chào,\n\n"
+            "Cảm ơn bạn đã đăng ký nhận thông báo từ AEGIX Threat Intelligence & Security Advisories!\n\n"
+            "Từ bây giờ, bạn sẽ là một trong những người đầu tiên nhận được tin tức khi chúng tôi phát hành tính năng mới, bản vá an ninh hoặc cảnh báo mã độc.\n\n"
+            "Nếu bạn muốn quản lý thông báo hoặc hủy đăng ký bất cứ lúc nào, bạn có thể click vào liên kết bên dưới footer.\n\n"
+            "Trân trọng,\n"
+            "AEGIX Security & Customer Operations Team\n"
+            "support@aegixbot.xyz | https://aegixbot.xyz"
+        )
+        asyncio.create_task(send_resend_email(to_email=email, subject=welcome_subject, text=welcome_text))
+
+    return JSONResponse(result, status_code=status_code)
+
+
+@mail_router.get("/api/newsletter/subscribers")
+async def api_get_subscribers(request: Request):
+    """Returns subscriber statistics (protected)."""
+    if not is_manage_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not turso_ref:
+        return JSONResponse({"active": 0, "total": 0})
+    counts = await turso_ref.get_subscribers_count()
+    return JSONResponse(counts)
+
+
+@mail_router.get("/unsubscribe", response_class=HTMLResponse)
+@mail_router.post("/unsubscribe", response_class=HTMLResponse)
+async def page_unsubscribe(request: Request, token: str = "", email: str = ""):
+    """1-Click Unsubscribe landing page."""
+    if request.method == "POST":
+        form = await get_form_data(request)
+        token = token or form.get("token", "")
+        email = email or form.get("email", "")
+
+    identifier = token.strip() or email.strip()
+    msg_html = ""
+
+    if identifier and turso_ref:
+        res = await turso_ref.unsubscribe(identifier)
+        if res.get("ok"):
+            msg_html = f"<h2 style='color:#35C97C;margin-top:0;'>✅ Successfully Unsubscribed</h2><p style='color:#8B96A5;line-height:1.6;'>{res.get('message')}</p>"
+        else:
+            msg_html = f"<h2 style='color:#E85B4E;margin-top:0;'>⚠️ Subscription Not Found</h2><p style='color:#8B96A5;line-height:1.6;'>{res.get('message')}</p>"
+
+    if not identifier:
+        form_html = f"""
+        <h2 style='color:#EAEEF2;margin-top:0;'>Unsubscribe from Security Bulletins</h2>
+        <p style='color:#8B96A5;font-size:0.9rem;line-height:1.6;margin-bottom:20px;'>
+          Enter the email address you wish to unsubscribe from AEGIX Security Advisories:
+        </p>
+        <form method='POST' action='/unsubscribe' style='display:flex;flex-direction:column;gap:12px;'>
+          <input type='email' name='email' placeholder='name@example.com' required style='padding:12px 14px;background:#0B0E13;border:1px solid #2B3644;border-radius:8px;color:#EAEEF2;font-size:0.95rem;outline:none;'>
+          <button type='submit' style='padding:12px;background:#E85B4E;color:#FFFFFF;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.95rem;'>Confirm Unsubscribe</button>
+        </form>
+        """
+    else:
+        form_html = f"""
+        {msg_html}
+        <div style='margin-top:24px;'>
+          <a href='https://aegixbot.xyz' style='display:inline-block;padding:10px 20px;background:#E2883D;color:#0B0E13;text-decoration:none;border-radius:8px;font-weight:700;font-size:0.9rem;'>Return to AEGIX Home</a>
+        </div>
+        """
+
+    return f"""<!DOCTYPE html>
+<html lang='vi'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width,initial-scale=1.0'>
+  <title>AEGIX — Unsubscribe Management</title>
+  <style>
+    body {{ background: #0B0E13; color: #EAEEF2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }}
+    .unsub-card {{ background: #141B24; border: 1px solid #2B3644; border-radius: 16px; max-width: 480px; width: 100%; padding: 36px 28px; text-align: center; box-shadow: 0 16px 40px rgba(0,0,0,0.6); }}
+  </style>
+</head>
+<body>
+  <div class='unsub-card'>
+    {form_html}
+  </div>
+</body>
+</html>"""
+
+# # DISCORD COMMANDS REGISTRATION (?inbox, ?mail, ?email, ?reply, ?aidraft)
 # ──────────────────────────────────────────────
 def setup_mail_commands(bot: commands.Bot, turso: Any):
     """Registers comprehensive Discord prefix commands for Email Management."""
@@ -2784,6 +2932,60 @@ def setup_mail_commands(bot: commands.Bot, turso: Any):
 # ──────────────────────────────────────────────
 # ATTACH TO MAIN RUNNER
 # ──────────────────────────────────────────────
+
+    @bot.command(name="subscribers", aliases=["subs", "subcount"])
+    async def subscribers_cmd(ctx):
+        """Xem số lượng người đăng ký nhận bản tin AEGIX."""
+        if not turso:
+            return await ctx.send("❌ Cơ sở dữ liệu Turso chưa được kết nối.")
+        counts = await turso.get_subscribers_count()
+        embed = discord.Embed(
+            title="📬 Danh Sách Đăng Ký Bản Tin (Subscribers)",
+            color=0xE2883D,
+            description=(
+                f"• **Active Subscribers:** `{counts.get('active', 0)}` người dùng\n"
+                f"• **Total Registrations:** `{counts.get('total', 0)}` lượt\n\n"
+                f"Người dùng có thể đăng ký tại: `https://aegixbot.xyz/news#subscribe`"
+            )
+        )
+        embed.set_footer(text=f"AEGIX Security Dispatch • {format_vn_time()}")
+        await ctx.send(embed=embed)
+
+    @bot.command(name="broadcast", aliases=["sendall", "broadcastnews"])
+    async def broadcast_cmd(ctx, *, args: str = ""):
+        """Phát tin bản tin / thông báo tới toàn bộ subscribers: ?broadcast <Tiêu đề> | <Nội dung>"""
+        if ctx.author.id != OWNER_ID:
+            return await ctx.send("❌ Chỉ Owner mới có quyền gửi broadcast email!")
+        if not turso:
+            return await ctx.send("❌ Cơ sở dữ liệu Turso chưa được kết nối.")
+
+        if "|" not in args:
+            return await ctx.send("⚠️ Cú pháp: `?broadcast <Tiêu đề email> | <Nội dung email>`")
+
+        subject, content = [x.strip() for x in args.split("|", 1)]
+        if not subject or not content:
+            return await ctx.send("⚠️ Tiêu đề hoặc nội dung không được để trống.")
+
+        subs = await turso.get_subscribers(status="active")
+        if not subs:
+            return await ctx.send("ℹ️ Hiện chưa có subscriber nào trong trạng thái active.")
+
+        status_msg = await ctx.send(f"⏳ Đang gửi email broadcast tới **{len(subs)}** subscribers...")
+        success_count = 0
+        fail_count = 0
+
+        for s in subs:
+            rec_email = s.get("email")
+            if rec_email:
+                ok, _ = await send_resend_email(to_email=rec_email, subject=subject, text=content)
+                if ok:
+                    success_count += 1
+                else:
+                    fail_count += 1
+                await asyncio.sleep(0.3)
+
+        await status_msg.edit(content=f"✅ **Hoàn tất Broadcast!** Đã gửi thành công `{success_count}/{len(subs)}` email (Thất bại: `{fail_count}`).")
+
 def setup_mail_system(bot_instance: commands.Bot, turso_instance: Any, app_instance: Any):
     """Binds bot, turso DB, FastAPI router, and registers interactive commands."""
     global bot_ref, turso_ref

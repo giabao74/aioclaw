@@ -105,18 +105,6 @@ class TursoDB:
         """)
 
         await self.execute("""
-            CREATE TABLE IF NOT EXISTS subscribers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT UNIQUE NOT NULL,
-                ip TEXT DEFAULT '',
-                status TEXT DEFAULT 'active',
-                token TEXT UNIQUE NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        """)
-
-        await self.execute("""
             CREATE TABLE IF NOT EXISTS support_emails (
                 id TEXT PRIMARY KEY,
                 thread_id TEXT NOT NULL,
@@ -414,73 +402,3 @@ class TursoDB:
             or q_raw in em.get("id", "").lower()
         ]
         return matched[:limit]
-
-    # ── NEWSLETTER & SUBSCRIBERS ──
-    async def add_subscriber(self, email: str, ip: str = "") -> Dict[str, Any]:
-        """Adds or reactivates a subscriber with duplicate detection."""
-        import re, secrets
-        clean_email = (email or "").strip().lower()
-        if not clean_email or not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", clean_email):
-            return {"ok": False, "duplicate": False, "message": "Invalid email address format. Please check and try again!"}
-
-        now_str = datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            rows = await self.execute("SELECT id, status FROM subscribers WHERE lower(email) = ?", [clean_email])
-            if rows:
-                sub_id = rows[0].get("id")
-                status = rows[0].get("status", "active")
-                if status == "active":
-                    return {"ok": False, "duplicate": True, "message": "This email address is already subscribed to updates."}
-                else:
-                    await self.execute("UPDATE subscribers SET status = 'active', ip = ?, updated_at = ? WHERE id = ?", [ip, now_str, sub_id])
-                    return {"ok": True, "duplicate": False, "reactivated": True, "message": "Welcome back! Your subscription has been reactivated."}
-
-            token = secrets.token_urlsafe(24)
-            await self.execute("""
-                INSERT INTO subscribers (email, ip, status, token, created_at, updated_at)
-                VALUES (?, ?, 'active', ?, ?, ?)
-            """, [clean_email, ip, token, now_str, now_str])
-            return {"ok": True, "duplicate": False, "reactivated": False, "message": "Successfully subscribed to AEGIX Security Dispatches! Thank you.", "token": token}
-        except Exception as e:
-            log.error(f"Turso add_subscriber error: {e}")
-            return {"ok": False, "duplicate": False, "message": f"System error: {e}"}
-
-    async def unsubscribe(self, token_or_email: str) -> Dict[str, Any]:
-        """Unsubscribes via token or email."""
-        clean_val = (token_or_email or "").strip().lower()
-        if not clean_val:
-            return {"ok": False, "message": "Invalid unsubscribe request."}
-
-        now_str = datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            rows = await self.execute("SELECT id, email, status FROM subscribers WHERE token = ? OR lower(email) = ?", [token_or_email.strip(), clean_val])
-            if not rows:
-                return {"ok": False, "message": "No matching active subscription found."}
-
-            sub_id = rows[0].get("id")
-            email = rows[0].get("email")
-            await self.execute("UPDATE subscribers SET status = 'unsubscribed', updated_at = ? WHERE id = ?", [now_str, sub_id])
-            return {"ok": True, "email": email, "message": f"Successfully unsubscribed {email} from security notifications."}
-        except Exception as e:
-            log.error(f"Turso unsubscribe error: {e}")
-            return {"ok": False, "message": f"System error: {e}"}
-
-    async def get_subscribers(self, status: str = "active") -> List[Dict[str, Any]]:
-        """Returns list of subscribers."""
-        try:
-            return await self.execute("SELECT id, email, ip, status, token, created_at FROM subscribers WHERE status = ? ORDER BY id DESC", [status])
-        except Exception as e:
-            log.error(f"Turso get_subscribers error: {e}")
-            return []
-
-    async def get_subscribers_count(self) -> Dict[str, int]:
-        """Returns subscriber counts."""
-        try:
-            r_act = await self.execute("SELECT COUNT(*) as count FROM subscribers WHERE status = 'active'")
-            r_tot = await self.execute("SELECT COUNT(*) as count FROM subscribers")
-            active = r_act[0].get("count", 0) if r_act else 0
-            total = r_tot[0].get("count", 0) if r_tot else 0
-            return {"active": int(active), "total": int(total)}
-        except Exception as e:
-            log.error(f"Turso get_subscribers_count error: {e}")
-            return {"active": 0, "total": 0}
