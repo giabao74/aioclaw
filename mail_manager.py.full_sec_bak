@@ -383,18 +383,6 @@ def get_auth_token() -> str:
     """Legacy alias — kept for backward compatibility."""
     return create_session_token()
 
-def check_session_status(request: Request) -> tuple[bool, str]:
-    """Returns (is_valid: bool, reason: str) where reason is 'ok', 'missing', 'invalid', or 'timeout'."""
-    cookie_token = request.cookies.get(_SESSION_COOKIE_NAME)
-    if not cookie_token:
-        return False, "missing"
-    issued_at, valid = _parse_session_token(cookie_token)
-    if not valid:
-        return False, "invalid"
-    if (time.time() - issued_at) > SESSION_IDLE_SECONDS:
-        return False, "timeout"
-    return True, "ok"
-
 def is_manage_authenticated(request: Request) -> bool:
     """Validates session cookie: HMAC signature + 60-min idle window."""
     cookie_token = request.cookies.get(_SESSION_COOKIE_NAME)
@@ -713,22 +701,11 @@ async def handle_resend_webhook(request: Request):
     Receives incoming emails from Resend Inbound Webhook.
     Extracts sender, subject, body, attachments, generates AI draft,
     stores in DB, and dispatches interactive alert & thread to Discord.
-    Protected with DDoS rate limiting, payload capping, and Svix signature verification.
     """
     try:
-        ip = _get_client_ip(request)
-        if not _rate_check(ip, "resend_webhook", max_hits=60, window=60):
-            log.warning(f"[SECURITY] Rate limited webhook from {ip}")
-            return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
-
         body_bytes = await request.body()
         if not body_bytes:
             return JSONResponse({"status": "error", "message": "Empty body"}, status_code=400)
-
-        # Anti-DDoS payload size limit (max 10MB)
-        if len(body_bytes) > 10 * 1024 * 1024:
-            log.warning(f"[SECURITY] Webhook payload too large ({len(body_bytes)} bytes) from {ip}")
-            return JSONResponse({"status": "error", "message": "Payload too large"}, status_code=413)
 
         # Svix / Resend Webhook Signature Verification with timestamp replay check
         svix_id = request.headers.get("svix-id")
@@ -1115,111 +1092,6 @@ def render_login_html(error: str = "") -> str:
 </body>
 </html>"""
 
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CLIENT-SIDE AUTO-LOGOUT (60-MIN IDLE INACTIVITY TIMEOUT + COUNTDOWN BANNER)
-# ─────────────────────────────────────────────────────────────────────────────
-_AUTO_LOGOUT_HTML_SNIPPET = """
-  <!-- Auto-logout after 60 minutes of inactivity & Heartbeat Renewal -->
-  <div id="_idle_warn" style="display:none;position:fixed;bottom:24px;right:24px;z-index:99999;background:rgba(15,23,42,0.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(239,68,68,0.5);border-radius:18px;padding:20px 24px;max-width:360px;box-shadow:0 16px 40px rgba(0,0,0,0.75),0 0 24px rgba(239,68,68,0.25);font-family:'Inter',sans-serif;color:#f8fafc;">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-      <span style="font-size:22px;line-height:1">⏳</span>
-      <div>
-        <strong style="color:#fbbf24;font-size:14px;font-weight:700">Phiên sắp hết hạn</strong>
-        <div style="font-size:11px;color:#94a3b8">Bảo mật tự động AEGIX Shield</div>
-      </div>
-    </div>
-    <p style="margin:0 0 14px;color:#cbd5e1;font-size:13px;line-height:1.5">
-      Tự động đăng xuất sau <strong id="_idle_cd" style="color:#ef4444;font-family:monospace;font-size:15px;font-weight:700">5:00</strong> vì không hoạt động để bảo vệ an toàn dữ liệu và email.
-    </p>
-    <div style="display:flex;gap:10px">
-      <button onclick="window._renewSess()" style="flex:1;background:linear-gradient(135deg,#6366f1,#06b6d4);color:#ffffff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(99,102,241,0.35);transition:transform 0.15s">
-        Tiếp tục phiên
-      </button>
-      <button onclick="window.location.href='/manage/logout'" style="background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer">
-        Đăng xuất
-      </button>
-    </div>
-  </div>
-
-  <script>
-  (function () {
-    var IDLE_TIMEOUT_MS = 60 * 60 * 1000;      // 60 minutes max idle
-    var WARN_THRESHOLD_MS = 55 * 60 * 1000;    // Warn at 55 minutes (5m left)
-    var HEARTBEAT_THROTTLE_MS = 5 * 60 * 1000; // Heartbeat throttled to 5m
-    var idleTimer, warnTimer, cdInterval;
-    var lastHeartbeatTime = Date.now();
-
-    function startTimers() {
-      clearTimeout(idleTimer);
-      clearTimeout(warnTimer);
-      clearInterval(cdInterval);
-
-      var box = document.getElementById('_idle_warn');
-      if (box) box.style.display = 'none';
-
-      warnTimer = setTimeout(showWarning, WARN_THRESHOLD_MS);
-      idleTimer = setTimeout(forceLogout, IDLE_TIMEOUT_MS);
-    }
-
-    function showWarning() {
-      var box = document.getElementById('_idle_warn');
-      if (box) box.style.display = 'block';
-
-      var remainingSec = 300;
-      var cdEl = document.getElementById('_idle_cd');
-      clearInterval(cdInterval);
-      cdInterval = setInterval(function () {
-        remainingSec--;
-        if (remainingSec <= 0) {
-          clearInterval(cdInterval);
-          forceLogout();
-          return;
-        }
-        var m = Math.floor(remainingSec / 60);
-        var s = remainingSec % 60;
-        if (cdEl) cdEl.textContent = m + ':' + (s < 10 ? '0' : '') + s;
-      }, 1000);
-    }
-
-    function forceLogout() {
-      window.location.href = '/manage?err=timeout';
-    }
-
-    window._renewSess = function () {
-      fetch('/manage/heartbeat', { method: 'POST', credentials: 'same-origin' })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (data && data.ok) {
-            lastHeartbeatTime = Date.now();
-            startTimers();
-          } else {
-            forceLogout();
-          }
-        })
-        .catch(function () {
-          startTimers();
-        });
-    };
-
-    function onUserActive() {
-      var now = Date.now();
-      if (now - lastHeartbeatTime >= HEARTBEAT_THROTTLE_MS) {
-        lastHeartbeatTime = now;
-        fetch('/manage/heartbeat', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
-      }
-      startTimers();
-    }
-
-    ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'].forEach(function (evt) {
-      document.addEventListener(evt, onUserActive, { passive: true });
-    });
-
-    startTimers();
-  })();
-  </script>
-"""
 
 def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", error_msg: str = "") -> str:
     has_resend_key = bool(os.getenv("RESEND_API_KEY", RESEND_API_KEY).strip())
@@ -2624,64 +2496,20 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       }}
     }});
   </script>
-{_AUTO_LOGOUT_HTML_SNIPPET}
 </body>
 </html>"""
 
 @mail_router.get("/manage", response_class=HTMLResponse)
 async def manage_portal(request: Request, msg: str = "", err: str = ""):
-    """Protected web management interface for support emails. Rate-limited + 60m idle timeout."""
-    ip = _get_client_ip(request)
-    if not _rate_check(ip, "manage_portal", max_hits=60, window=60):
-        log.warning(f"[SECURITY] Rate limited /manage from {ip}")
-        return HTMLResponse(
-            "<html><body style='background:#050811;color:#ef4444;font-family:sans-serif;padding:40px;text-align:center'>"
-            "<h2>429 Quá nhiều yêu cầu</h2><p style='color:#94a3b8'>Vui lòng đợi một lát trước khi tải lại trang.</p></body></html>",
-            status_code=429,
-            headers={"Retry-After": "30"}
-        )
-
-    valid, reason = check_session_status(request)
-    if not valid:
-        if reason == "timeout" or err == "timeout":
-            error_text = "Phiên làm việc đã tự động kết thúc sau 60 phút không hoạt động để bảo vệ dữ liệu."
-        elif err == "1":
-            error_text = "Vui lòng nhập mật khẩu quản trị để tiếp tục."
-        elif err:
-            error_text = err
-        else:
-            error_text = ""
-        resp = HTMLResponse(render_login_html(error=error_text))
-        if reason in ("timeout", "invalid"):
-            resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/manage", samesite="strict", secure=True)
-        return resp
+    """Protected web management interface for support emails."""
+    if not is_manage_authenticated(request):
+        return HTMLResponse(render_login_html(error="Vui lòng nhập mật khẩu quản trị để tiếp tục." if err == "1" else ""))
 
     emails = []
     if turso_ref:
         emails = await turso_ref.get_all_emails(limit=150)
 
     return HTMLResponse(render_dashboard_html(emails=emails, success_msg=msg, error_msg=err))
-
-@mail_router.post("/manage/heartbeat")
-async def manage_heartbeat(request: Request):
-    """Refreshes the 60-minute idle session when user is actively interacting."""
-    ip = _get_client_ip(request)
-    if not _rate_check(ip, "manage_heartbeat", max_hits=40, window=60):
-        return JSONResponse({"ok": False, "message": "Too many requests"}, status_code=429)
-    if not is_manage_authenticated(request):
-        return JSONResponse({"ok": False, "expired": True, "message": "Phiên làm việc đã hết hạn"}, status_code=401)
-    new_token = create_session_token()
-    resp = JSONResponse({"ok": True, "refreshed": True, "expires_in": SESSION_IDLE_SECONDS})
-    resp.set_cookie(
-        key=_SESSION_COOKIE_NAME,
-        value=new_token,
-        max_age=SESSION_IDLE_SECONDS,
-        httponly=True,
-        samesite="strict",
-        secure=True,
-        path="/manage",
-    )
-    return resp
 
 @mail_router.post("/manage/login")
 async def manage_login(request: Request):
@@ -2727,14 +2555,9 @@ async def manage_logout(request: Request):
 
 @mail_router.post("/manage/send")
 async def manage_send(request: Request):
-    """Sends an email directly from the web interface using Resend. Rate-limited: 15/min."""
+    """Sends an email directly from the web interface using Resend."""
     if not is_manage_authenticated(request):
         return RedirectResponse(url="/manage?err=1", status_code=303)
-
-    ip = _get_client_ip(request)
-    if not _rate_check(ip, "manage_send", max_hits=15, window=60):
-        log.warning(f"[SECURITY] Rate limited manage_send from {ip}")
-        return RedirectResponse(url="/manage?err=Thao+tác+quá+nhanh!+Vui+lòng+chờ+1+phút", status_code=303)
 
     form_data = await get_form_data(request)
     recipient_clean = form_data.get("recipient", "").strip()
@@ -2765,13 +2588,9 @@ async def manage_send(request: Request):
 
 @mail_router.post("/manage/status")
 async def manage_update_status(request: Request):
-    """Updates status of an email (unread, read, replied). Rate-limited: 60/min."""
+    """Updates status of an email (unread, read, replied)."""
     if not is_manage_authenticated(request):
         return RedirectResponse(url="/manage?err=1", status_code=303)
-
-    ip = _get_client_ip(request)
-    if not _rate_check(ip, "manage_status", max_hits=60, window=60):
-        return RedirectResponse(url="/manage?err=Thao+tác+quá+nhanh", status_code=303)
 
     form_data = await get_form_data(request)
     email_id = form_data.get("email_id", "").strip()
@@ -2784,13 +2603,9 @@ async def manage_update_status(request: Request):
 
 @mail_router.get("/manage/api/thread/{thread_id}")
 async def manage_get_thread(request: Request, thread_id: str):
-    """JSON API to retrieve full thread history. Rate-limited: 60/min."""
+    """JSON API to retrieve full thread history."""
     if not is_manage_authenticated(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
-
-    ip = _get_client_ip(request)
-    if not _rate_check(ip, "manage_thread", max_hits=60, window=60):
-        return JSONResponse({"ok": False, "message": "Rate limit exceeded"}, status_code=429)
 
     if not turso_ref:
         return JSONResponse({"ok": False, "thread": []})
@@ -2800,13 +2615,9 @@ async def manage_get_thread(request: Request, thread_id: str):
 
 @mail_router.get("/manage/api/ai-draft/{email_id}")
 async def manage_get_ai_draft(request: Request, email_id: str):
-    """JSON API to fetch or generate on-demand AI draft. Rate-limited: 30/min."""
+    """JSON API to fetch or generate on-demand AI draft."""
     if not is_manage_authenticated(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
-
-    ip = _get_client_ip(request)
-    if not _rate_check(ip, "manage_aidraft", max_hits=30, window=60):
-        return JSONResponse({"ok": False, "message": "Rate limit exceeded"}, status_code=429)
 
     if not turso_ref:
         return JSONResponse({"ok": False, "ai_draft": ""})
@@ -3019,62 +2830,6 @@ def setup_mail_commands(bot: commands.Bot, turso: Any):
 # ──────────────────────────────────────────────
 # ATTACH TO MAIN RUNNER
 # ──────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
-# GLOBAL SECURITY MIDDLEWARE — Anti-DDoS, Security Headers & Exploit Bot Blocker
-# ─────────────────────────────────────────────────────────────────────────────
-_SECURITY_HEADERS = {
-    "X-Frame-Options": "DENY",
-    "X-Content-Type-Options": "nosniff",
-    "X-XSS-Protection": "1; mode=block",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
-    "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
-    "Content-Security-Policy": (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
-        "img-src 'self' data: https://aegixbot.xyz; "
-        "frame-src https://challenges.cloudflare.com; "
-        "connect-src 'self'; object-src 'none'; base-uri 'self';"
-    ),
-}
-
-_BAD_AGENTS = (
-    "sqlmap", "nikto", "masscan", "zgrab", "nuclei", "nmap",
-    "dirbuster", "gobuster", "hydra", "havij", "wpscan", "shodan", "censys"
-)
-
-async def _security_middleware(request: Request, call_next):
-    """Global Security Guard: Anti-DDoS rate limits, scanner blocking, security headers."""
-    ip   = _get_client_ip(request)
-    path = request.url.path
-    ua   = request.headers.get("user-agent", "").lower()
-
-    # Block automated vulnerability scanners & exploit bots
-    if any(b in ua for b in _BAD_AGENTS):
-        log.warning(f"[SECURITY] Blocked scanner/bot UA '{ua[:40]}' from {ip}")
-        return JSONResponse({"error": "forbidden", "detail": "Automated scanning blocked by AEGIX Shield"}, status_code=403)
-
-    # Anti-DDoS global rate limit: 180 requests/min per IP
-    if not _rate_check(ip, "global_firewall", max_hits=180, window=60):
-        log.warning(f"[SECURITY] DDoS threshold exceeded from {ip} on {path}")
-        return HTMLResponse(
-            "<html><body style='background:#050811;font-family:monospace;color:#ef4444;padding:50px;text-align:center'>"
-            "<h1>429 - Too Many Requests</h1><p style='color:#94a3b8'>AEGIX Shield DDoS Protection triggered. Please slow down and wait 60 seconds.</p>"
-            "</body></html>",
-            status_code=429,
-            headers={"Retry-After": "60"}
-        )
-
-    response = await call_next(request)
-
-    # Inject security hardening headers on response
-    for header_name, header_val in _SECURITY_HEADERS.items():
-        response.headers[header_name] = header_val
-
-    return response
-
 def setup_mail_system(bot_instance: commands.Bot, turso_instance: Any, app_instance: Any):
     """Binds bot, turso DB, FastAPI router, and registers interactive commands."""
     global bot_ref, turso_ref
@@ -3085,13 +2840,9 @@ def setup_mail_system(bot_instance: commands.Bot, turso_instance: Any, app_insta
     setup_mail_commands(bot_instance, turso_instance)
     try:
         from starlette.middleware.base import BaseHTTPMiddleware
-        app_instance.add_middleware(BaseHTTPMiddleware, dispatch=_security_middleware)
-        log.info("[SECURITY] Security middleware registered on app_instance (headers + DDoS protection)")
-    except Exception as _app_mw_err:
-        try:
-            if hasattr(bot_instance, "web_app"):
-                bot_instance.web_app.add_middleware(BaseHTTPMiddleware, dispatch=_security_middleware)
-                log.info("[SECURITY] Security middleware registered on bot_instance.web_app")
-        except Exception as _mw_err:
-            log.warning(f"[SECURITY] Middleware not registered: {_mw_err}")
+        if hasattr(bot_instance, "web_app"):
+            bot_instance.web_app.add_middleware(BaseHTTPMiddleware, dispatch=_security_middleware)
+            log.info("[SECURITY] Security middleware registered (headers + rate limiting)")
+    except Exception as _mw_err:
+        log.warning(f"[SECURITY] Middleware not registered: {_mw_err}")
     log.info(f"📧 AIClaw Mail System attached: /manage, AI Auto-Draft, Webhook /api/webhook/resend & Commands (?inbox, ?mail, ?email, ?reply, ?aidraft)")
