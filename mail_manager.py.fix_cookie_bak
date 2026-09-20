@@ -289,26 +289,6 @@ async def send_resend_email(
       <div style="margin-top:4px;">If you have any further questions, feel free to reply directly to this email or visit <a href="https://aegixbot.xyz" style="color:#38bdf8;text-decoration:none;">aegixbot.xyz</a>.</div>
     </div>
   </div>
-  <script>
-    function togglePassView() {{
-      var p = document.getElementById('password');
-      var svg = document.getElementById('eyeSvg');
-      if (p.type === 'password') {{
-        p.type = 'text';
-        svg.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
-      }} else {{
-        p.type = 'password';
-        svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
-      }}
-    }}
-    var f = document.querySelector('form');
-    if (f) {{
-      f.addEventListener('submit', function () {{
-        var p = document.getElementById('password');
-        if (p) p.value = p.value.trim();
-      }});
-    }}
-  </script>
 </body>
 </html>"""
 
@@ -403,45 +383,27 @@ def get_auth_token() -> str:
     """Legacy alias — kept for backward compatibility."""
     return create_session_token()
 
-def _extract_all_session_tokens(request: Request) -> list[str]:
-    """Extracts all values for _SESSION_COOKIE_NAME from raw Cookie header, solving duplicate path collisions."""
-    raw_cookie = request.headers.get("cookie", "")
-    tokens = []
-    if raw_cookie:
-        for part in raw_cookie.split(";"):
-            part = part.strip()
-            if "=" in part:
-                k, v = part.split("=", 1)
-                if k.strip() == _SESSION_COOKIE_NAME:
-                    val = v.strip()
-                    if val and val not in tokens:
-                        tokens.append(val)
-    c = request.cookies.get(_SESSION_COOKIE_NAME)
-    if c and c not in tokens:
-        tokens.append(c)
-    return tokens
-
 def check_session_status(request: Request) -> tuple[bool, str]:
     """Returns (is_valid: bool, reason: str) where reason is 'ok', 'missing', 'invalid', or 'timeout'."""
-    tokens = _extract_all_session_tokens(request)
-    if not tokens:
+    cookie_token = request.cookies.get(_SESSION_COOKIE_NAME)
+    if not cookie_token:
         return False, "missing"
-    has_timeout = False
-    for token in tokens:
-        issued_at, valid = _parse_session_token(token)
-        if valid:
-            if (time.time() - issued_at) <= SESSION_IDLE_SECONDS:
-                return True, "ok"
-            else:
-                has_timeout = True
-    if has_timeout:
+    issued_at, valid = _parse_session_token(cookie_token)
+    if not valid:
+        return False, "invalid"
+    if (time.time() - issued_at) > SESSION_IDLE_SECONDS:
         return False, "timeout"
-    return False, "invalid"
+    return True, "ok"
 
 def is_manage_authenticated(request: Request) -> bool:
     """Validates session cookie: HMAC signature + 60-min idle window."""
-    valid, _ = check_session_status(request)
-    return valid
+    cookie_token = request.cookies.get(_SESSION_COOKIE_NAME)
+    if not cookie_token:
+        return False
+    issued_at, valid = _parse_session_token(cookie_token)
+    if not valid:
+        return False
+    return (time.time() - issued_at) <= SESSION_IDLE_SECONDS
 
 # ──────────────────────────────────────────────
 # DISCORD UI (BUTTONS & MODAL)
@@ -1128,11 +1090,8 @@ def render_login_html(error: str = "") -> str:
       <form method="POST" action="/manage/login">
         <div class="form-group">
           <label for="password">Master Security Key</label>
-          <div class="input-wrapper" style="position:relative;display:flex;align-items:center;">
-            <input type="password" id="password" name="password" placeholder="Enter master access password..." required autofocus style="padding-right:46px;">
-            <button type="button" onclick="togglePassView()" id="togglePassBtn" title="Hiện/Ẩn mật khẩu" style="position:absolute;right:12px;background:none;border:none;color:#94a3b8;cursor:pointer;padding:6px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;">
-              <svg id="eyeSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
+          <div class="input-wrapper">
+            <input type="password" id="password" name="password" placeholder="Enter master access password..." required autofocus>
           </div>
         </div>
         <button type="submit" class="btn-login">
@@ -1335,29 +1294,11 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
             safe_body = body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             safe_ai_draft = ai_draft.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\\n", "<br>")
 
-            # Attachment Chips with 1-Click Secure Download
+            # Attachment Chips
             att_html = ""
             if att_list:
-                pills = []
-                for a in att_list:
-                    fn = a.get("filename", "attachment")
-                    aid = a.get("id", "")
-                    if aid:
-                        pills.append(
-                            f'<a href="/manage/api/attachment/{aid}?filename={fn}" target="_blank" download="{fn}" class="att-chip att-chip-link" title="Bấm để tải tệp đính kèm">'
-                            f'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>'
-                            f'<span>{fn}</span>'
-                            f'<span class="dl-badge">Tải về ⬇</span>'
-                            f'</a>'
-                        )
-                    else:
-                        pills.append(
-                            f'<span class="att-chip">'
-                            f'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
-                            f'{fn}'
-                            f'</span>'
-                        )
-                att_html = f'<div class="att-wrapper">{"".join(pills)}</div>'
+                pills = "".join(f'<span class="att-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>{a.get("filename", "attachment")}</span>' for a in att_list)
+                att_html = f'<div class="att-wrapper">{pills}</div>'
 
             # AI Summary banner
             ai_summary_html = ""
@@ -2027,30 +1968,6 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       display: inline-flex;
       align-items: center;
       gap: 6px;
-    }}
-    .att-chip-link {{
-      text-decoration: none;
-      cursor: pointer;
-      background: rgba(6, 182, 212, 0.14);
-      border: 1px solid rgba(6, 182, 212, 0.4);
-      color: #38BDF8 !important;
-      transition: all 0.2s ease;
-    }}
-    .att-chip-link:hover {{
-      background: rgba(6, 182, 212, 0.3);
-      border-color: #38BDF8;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
-    }}
-    .dl-badge {{
-      background: rgba(56, 189, 248, 0.2);
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      border-radius: 5px;
-      padding: 1px 6px;
-      font-size: 10px;
-      font-weight: 700;
-      margin-left: 4px;
-      color: #7DD3FC;
     }}
     .att-badge {{
       color: var(--cyan);
@@ -2755,15 +2672,14 @@ async def manage_heartbeat(request: Request):
         return JSONResponse({"ok": False, "expired": True, "message": "Phiên làm việc đã hết hạn"}, status_code=401)
     new_token = create_session_token()
     resp = JSONResponse({"ok": True, "refreshed": True, "expires_in": SESSION_IDLE_SECONDS})
-    resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/manage")
     resp.set_cookie(
         key=_SESSION_COOKIE_NAME,
         value=new_token,
         max_age=SESSION_IDLE_SECONDS,
         httponly=True,
-        samesite="lax",
+        samesite="strict",
         secure=True,
-        path="/",
+        path="/manage",
     )
     return resp
 
@@ -2784,17 +2700,14 @@ async def manage_login(request: Request):
     if hmac.compare_digest(password, expected):
         token = create_session_token()
         resp  = RedirectResponse(url="/manage", status_code=303)
-        # Clear legacy path="/manage" cookie to avoid duplicate cookie collisions in Chrome
-        resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/manage")
-        # Set new session cookie with root path="/" and samesite="lax" for 100% browser compatibility
         resp.set_cookie(
             key=_SESSION_COOKIE_NAME,
             value=token,
             max_age=SESSION_IDLE_SECONDS,
             httponly=True,
-            samesite="lax",
+            samesite="strict",
             secure=True,
-            path="/",
+            path="/manage",
         )
         log.info(f"[SECURITY] Login success from {ip}")
         return resp
@@ -2806,9 +2719,8 @@ async def manage_login(request: Request):
 
 @mail_router.get("/manage/logout")
 async def manage_logout(request: Request):
-    """Logs out: clears signed session cookie across all paths and redirects to /manage."""
-    resp = RedirectResponse(url="/manage", status_code=303)
-    resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/", samesite="lax", secure=True)
+    """Logs out: clears signed session cookie and redirects."""
+    resp = RedirectResponse(url="/", status_code=303)
     resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/manage", samesite="strict", secure=True)
     log.info(f"[SECURITY] Logout from {_get_client_ip(request)}")
     return resp
@@ -2885,58 +2797,6 @@ async def manage_get_thread(request: Request, thread_id: str):
 
     thread = await turso_ref.get_thread_emails(thread_id)
     return JSONResponse({"ok": True, "thread": thread})
-
-@mail_router.get("/manage/api/attachment/{attachment_id}")
-async def manage_download_attachment(request: Request, attachment_id: str, filename: str = ""):
-    """Finds attachment in Resend and redirects to signed CDN download URL."""
-    if not is_manage_authenticated(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    ip = _get_client_ip(request)
-    if not _rate_check(ip, "manage_attachment", max_hits=30, window=60):
-        raise HTTPException(status_code=429, detail="Too many download requests")
-
-    current_key = os.getenv("RESEND_API_KEY", RESEND_API_KEY).strip()
-    if not current_key:
-        raise HTTPException(status_code=500, detail="Missing RESEND_API_KEY")
-
-    headers = {
-        "Authorization": f"Bearer {current_key}",
-        "User-Agent": "Mozilla/5.0 (AIClaw-Attachment-Downloader/2.0)"
-    }
-
-    # Query Resend Receiving API list to locate the email containing this attachment
-    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-    async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=15)) as session:
-        try:
-            async with session.get("https://api.resend.com/emails/receiving", headers=headers) as resp:
-                if resp.status != 200:
-                    raise HTTPException(status_code=resp.status, detail="Could not list receiving emails")
-                res_data = await resp.json()
-                emails = res_data.get("data", [])
-        except HTTPException:
-            raise
-        except Exception as e:
-            log.error(f"Error listing receiving emails for attachment: {e}")
-            raise HTTPException(status_code=502, detail=f"Resend API error: {e}")
-
-        for em in emails:
-            eid = em.get("id")
-            if not eid:
-                continue
-            try:
-                att_url = f"https://api.resend.com/emails/receiving/{eid}/attachments/{attachment_id}"
-                async with session.get(att_url, headers=headers) as att_resp:
-                    if att_resp.status == 200:
-                        att_info = await att_resp.json()
-                        dl_url = att_info.get("download_url")
-                        if dl_url:
-                            log.info(f"📎 Redirecting attachment {attachment_id} to signed CDN download URL")
-                            return RedirectResponse(url=dl_url, status_code=307)
-            except Exception:
-                continue
-
-    raise HTTPException(status_code=404, detail="Tệp đính kèm không tồn tại hoặc đã hết hạn trên Resend")
 
 @mail_router.get("/manage/api/ai-draft/{email_id}")
 async def manage_get_ai_draft(request: Request, email_id: str):
