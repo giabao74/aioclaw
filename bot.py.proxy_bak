@@ -1385,94 +1385,31 @@ async def on_message(message: discord.Message):
 # ──────────────────────────────────────────────
 # MAIN RUNNER (FastAPI + Discord Bot)
 # ──────────────────────────────────────────────
-# ──────────────────────────────────────────────
-# AUTOMATIC PROXY ROTATION & FAILOVER FOR DISCORD (Bypasses Cloudflare Error 1015)
-# ──────────────────────────────────────────────
-PROXIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxies.txt")
-_ALL_PROXIES: List[str] = []
-
-if os.path.exists(PROXIES_FILE):
-    try:
-        with open(PROXIES_FILE, "r", encoding="utf-8") as _pf:
-            _ALL_PROXIES = [line.strip() for line in _pf if line.strip() and ":" in line]
-        log.info(f"🌐 Loaded {len(_ALL_PROXIES)} proxies from proxies.txt")
-    except Exception as _e:
-        log.warning(f"Could not load proxies.txt: {_e}")
-
-async def test_single_proxy(proxy: str) -> bool:
-    """Tests if a proxy can connect to Discord Gateway without Cloudflare block."""
-    url = "https://discord.com/api/v10/gateway"
-    proxy_url = f"http://{proxy}" if not proxy.startswith("http") else proxy
-    try:
-        connector = aiohttp.TCPConnector(ssl=False)
-        async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=3.5)) as session:
-            async with session.get(url, proxy=proxy_url) as resp:
-                return resp.status == 200
-    except Exception:
-        return False
-
-async def find_working_proxy(max_trials: int = 50) -> Optional[str]:
-    """Concurrently scans proxy list in small batches to find an active proxy."""
-    if not _ALL_PROXIES:
-        return None
-
-    import random
-    candidates = random.sample(_ALL_PROXIES, min(max_trials, len(_ALL_PROXIES)))
-    batch_size = 10
-    for i in range(0, len(candidates), batch_size):
-        batch = candidates[i:i + batch_size]
-        results = await asyncio.gather(*(test_single_proxy(p) for p in batch), return_exceptions=True)
-        for p, ok in zip(batch, results):
-            if ok is True:
-                log.info(f"✅ Verified working proxy: {p} (Discord Gateway accessible)")
-                return p
-    return None
-
 def run_web_server():
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
 
 async def run_bot_resilient():
-    """Runs Discord bot with intelligent backoff & automatic proxy rotation on Cloudflare 1015."""
-    backoff = 10
-    current_proxy = os.getenv("DISCORD_PROXY", "").strip() or None
-
+    """Runs Discord bot with intelligent backoff so Cloudflare 1015 rate limit never crashes the web service."""
+    backoff = 30
     while True:
         try:
-            if current_proxy:
-                p_url = f"http://{current_proxy}" if not current_proxy.startswith("http") else current_proxy
-                bot.http.proxy = p_url
-                log.info(f"🛡️ Connecting Discord Bot via Proxy: {p_url} ...")
-            else:
-                bot.http.proxy = None
-                log.info("🤖 Connecting Discord Bot directly to Gateway...")
-
+            log.info("🤖 Starting Discord Bot connection to Gateway...")
             await bot.start(DISCORD_TOKEN)
         except discord.errors.HTTPException as http_err:
             is_cf_1015 = (http_err.status == 429) or ("1015" in str(http_err)) or ("rate limit" in str(http_err).lower())
             if is_cf_1015:
                 log.warning(
-                    f"⚠️ [CLOUDFLARE 1015] Render outgoing IP was rate-limited by Discord! "
-                    f"Searching live proxy from {len(_ALL_PROXIES)} proxy pool..."
+                    f"⚠️ [CLOUDFLARE 1015] Render outgoing IP is temporarily rate-limited by Discord/Cloudflare. "
+                    f"Cooling down for {backoff}s before retrying. (Web Server & /manage portal remain 100% ONLINE)."
                 )
-                live_p = await find_working_proxy()
-                if live_p:
-                    current_proxy = live_p
-                    log.info(f"🚀 Switching connection to live proxy: {current_proxy}")
-                    await asyncio.sleep(2)
-                    continue
-                else:
-                    log.warning(f"Could not find live proxy in current batch. Backing off {backoff}s...")
             else:
-                log.error(f"❌ Discord HTTPException ({http_err.status}): {http_err}. Retrying in {backoff}s...")
+                log.error(f"❌ Discord HTTPException: {http_err}. Retrying in {backoff}s...")
             await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 120)
+            backoff = min(backoff * 2, 300)
         except Exception as err:
-            log.error(f"❌ Discord connection error: {err}. Switching proxy and retrying in {backoff}s...")
-            live_p = await find_working_proxy()
-            if live_p:
-                current_proxy = live_p
+            log.error(f"❌ Discord connection error: {err}. Retrying in {backoff}s...")
             await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 120)
+            backoff = min(backoff * 2, 300)
 
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
@@ -1484,7 +1421,7 @@ if __name__ == "__main__":
     web_thread.start()
     log.info(f"🚀 Render Web Server Keepalive listening on port {PORT}")
 
-    # 2. Run Discord Bot with resilient auto-proxy failover (Never crashes web service)
+    # 2. Run Discord Bot with resilient reconnection (Never crashes web service)
     log.info("🤖 Starting Discord Bot on Render.com with Mon/Wed/Fri VN Rotation Schedule...")
     try:
         asyncio.run(run_bot_resilient())
