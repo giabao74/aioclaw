@@ -1388,6 +1388,29 @@ async def on_message(message: discord.Message):
 def run_web_server():
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
 
+async def run_bot_resilient():
+    """Runs Discord bot with intelligent backoff so Cloudflare 1015 rate limit never crashes the web service."""
+    backoff = 30
+    while True:
+        try:
+            log.info("🤖 Starting Discord Bot connection to Gateway...")
+            await bot.start(DISCORD_TOKEN)
+        except discord.errors.HTTPException as http_err:
+            is_cf_1015 = (http_err.status == 429) or ("1015" in str(http_err)) or ("rate limit" in str(http_err).lower())
+            if is_cf_1015:
+                log.warning(
+                    f"⚠️ [CLOUDFLARE 1015] Render outgoing IP is temporarily rate-limited by Discord/Cloudflare. "
+                    f"Cooling down for {backoff}s before retrying. (Web Server & /manage portal remain 100% ONLINE)."
+                )
+            else:
+                log.error(f"❌ Discord HTTPException: {http_err}. Retrying in {backoff}s...")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 300)
+        except Exception as err:
+            log.error(f"❌ Discord connection error: {err}. Retrying in {backoff}s...")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 300)
+
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
         log.error("❌ DISCORD_BOT_TOKEN is missing! Please configure DISCORD_BOT_TOKEN in Render Environment Variables.")
@@ -1398,6 +1421,9 @@ if __name__ == "__main__":
     web_thread.start()
     log.info(f"🚀 Render Web Server Keepalive listening on port {PORT}")
 
-    # 2. Run Discord Bot on main thread
+    # 2. Run Discord Bot with resilient reconnection (Never crashes web service)
     log.info("🤖 Starting Discord Bot on Render.com with Mon/Wed/Fri VN Rotation Schedule...")
-    bot.run(DISCORD_TOKEN)
+    try:
+        asyncio.run(run_bot_resilient())
+    except KeyboardInterrupt:
+        log.info("🛑 Bot stopped cleanly.")
