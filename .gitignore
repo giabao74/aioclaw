@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+*.pyo
+*.bak
+*.cf_bak
+*.patch_bak
+*.proxy_bak
+*.att_bak
+*.fix_cookie_bak
+*.full_sec_bak
+*.mail_fix_bak
+*.security_bak
+*.log
+.DS_Store
