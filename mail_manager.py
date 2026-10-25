@@ -1026,11 +1026,9 @@ async def handle_resend_webhook(request: Request):
     if turso_ref:
         existing_thread = await turso_ref.find_existing_thread(sender=sender, subject=subject)
         if existing_thread or subject.lower().startswith("re:"):
-            status = "user_replied"
             is_reply = 1
             if existing_thread:
                 thread_id = existing_thread.get("thread_id", existing_thread.get("id", email_id))
-                await turso_ref.update_email_status(existing_thread.get("id"), "user_replied")
                 thread_history = await turso_ref.get_thread_emails(thread_id)
             log.info(f"🔄 Detected conversation reply from {sender} on thread {thread_id}")
 
