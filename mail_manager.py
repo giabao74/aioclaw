@@ -695,7 +695,7 @@ async def handle_email_interaction(interaction: discord.Interaction):
     elif action == "ai":
         ai_draft = email_item.get("ai_draft", "")
         if not ai_draft:
-            ai_draft = f"Kính gửi {sender},\n\nCảm ơn bạn đã liên hệ với Aegix Support Team. Về yêu cầu '{orig_subject}', chúng tôi xin phản hồi như sau:\n\nTrân trọng,\nAegix Operations Team"
+            ai_draft = f"Kính gửi {sender},\n\nCảm ơn bạn đã liên hệ với AEGIX Support Team. Về yêu cầu '{orig_subject}', chúng tôi xin phản hồi như sau:\n\nTrân trọng,\nAEGIX Operations Team"
         modal = EmailReplyModal(
             email_id=email_id,
             sender=sender,
@@ -804,7 +804,7 @@ async def dispatch_email_to_discord(email_item: dict):
 
     # Color determination
     embed_color = 0x3b82f6 # Cobalt signal
-    if status in ("unread", "new"):
+    if status in ("unread", "new", "user_replied"):
         embed_color = 0xf59e0b # Amber alert
     elif status == "replied":
         embed_color = 0x10b981 # Emerald
@@ -867,7 +867,7 @@ async def dispatch_email_to_discord(email_item: dict):
         embed.add_field(name="✨ AI Gợi Ý Phản Hồi", value=f"```text\n{draft_snippet}\n```", inline=False)
 
     embed.set_footer(
-        text=f"Aegix Secure Inbound · Hỗ trợ Trả lời / Chuyển tiếp / Đã xem qua nút bên dưới",
+        text=f"AEGIX Secure Inbound · Hỗ trợ Trả lời / Chuyển tiếp / Đã xem qua nút bên dưới",
         icon_url="https://cdn.discordapp.com/emojis/123456789.png" if False else None
     )
 
@@ -1306,7 +1306,7 @@ def render_login_html(error: str = "") -> str:
 def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", error_msg: str = "") -> str:
     has_resend_key = bool(os.getenv("RESEND_API_KEY", RESEND_API_KEY).strip())
     total = len(emails)
-    unread = sum(1 for e in emails if e.get("status") in ("unread", "new"))
+    unread = sum(1 for e in emails if e.get("status") in ("unread", "new", "user_replied"))
     seen = sum(1 for e in emails if e.get("status") == "seen")
     replied = sum(1 for e in emails if e.get("status") == "replied")
     forwarded = sum(1 for e in emails if e.get("status") == "forwarded")
@@ -2959,7 +2959,7 @@ async def api_manage_emails(req: Request, status: Optional[str] = None, limit: i
     if status and status != "all":
         status_norm = status.lower().strip()
         if status_norm == "unread":
-            emails = [e for e in emails if e.get("status") in ("unread", "new")]
+            emails = [e for e in emails if e.get("status") in ("unread", "new", "user_replied")]
         else:
             emails = [e for e in emails if e.get("status") == status_norm]
 
