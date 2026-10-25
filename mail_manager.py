@@ -1387,26 +1387,28 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
                 "archived": "badge-muted"
             }
             status_badge_labels = {
-                "unread": "🔴 MỚI (NEW)",
-                "new": "🔴 MỚI (NEW)",
-                "seen": "👁️ ĐÃ XEM",
-                "replied": "🟢 ĐÃ TRẢ LỜI",
-                "forwarded": "🔵 ĐÃ CHUYỂN TIẾP",
-                "user_replied": "🟡 KHÁCH HỒI ĐÁP",
-                "archived": "📁 LƯU TRỮ"
+                "unread": "MỚI (NEW)",
+                "new": "MỚI (NEW)",
+                "seen": "ĐÃ XEM",
+                "replied": "ĐÃ TRẢ LỜI",
+                "forwarded": "ĐÃ CHUYỂN TIẾP",
+                "user_replied": "KHÁCH HỒI ĐÁP",
+                "archived": "LƯU TRỮ"
             }
             badge_cls = status_badge_classes.get(st, "badge-slate")
             badge_lbl = status_badge_labels.get(st, st.upper())
 
-            # Escaped text for modals
+            # Escaped text for HTML and attributes
             import html
             safe_body = html.escape(body)
             safe_subject = html.escape(subject)
             safe_sender = html.escape(sender)
             safe_aidraft = html.escape(ai_draft)
+            safe_raw_sender = html.escape(sender, quote=True)
+            safe_raw_subject = html.escape(subject, quote=True)
 
             email_cards_html += f'''
-            <div class="email-item" data-id="{eid}" data-status="{st}" data-sender="{safe_sender.lower()}" data-subject="{safe_subject.lower()}">
+            <div class="email-item" data-id="{eid}" data-status="{st}" data-sender="{safe_sender.lower()}" data-subject="{safe_subject.lower()}" data-raw-sender="{safe_raw_sender}" data-raw-subject="{safe_raw_subject}">
               <div class="email-header" onclick="toggleEmailBody('{eid}')">
                 <div class="email-meta-left">
                   <span class="status-badge {badge_cls}">{badge_lbl}</span>
@@ -1420,6 +1422,9 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
               </div>
 
               <div class="email-body-panel" id="body-{eid}">
+                <textarea id="aidraft-{eid}" style="display:none;">{safe_aidraft}</textarea>
+                <textarea id="rawbody-{eid}" style="display:none;">{safe_body}</textarea>
+
                 <div class="email-details-grid">
                   <div><strong>Mã Tra Cứu:</strong> <code>{eid}</code></div>
                   <div><strong>Hộp Thư Đến:</strong> <code>{SUPPORT_EMAIL}</code></div>
@@ -1435,16 +1440,16 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
                 {atts_html}
 
                 <div class="email-actions-bar">
-                  <button type="button" class="action-btn btn-reply" onclick="openReplyModal('{eid}', '{safe_sender}', '{safe_subject}', '{safe_aidraft}')">
+                  <button type="button" class="action-btn btn-reply" onclick="handleReply('{eid}')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
                     <span>Phản Hồi (Reply)</span>
                   </button>
-                  <button type="button" class="action-btn btn-forward" onclick="openForwardModal('{eid}', '{safe_sender}', '{safe_subject}', `{safe_body[:500]}`)">
+                  <button type="button" class="action-btn btn-forward" onclick="handleForward('{eid}')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path></svg>
                     <span>Chuyển Tiếp (Forward)</span>
                   </button>
                   <button type="button" class="action-btn btn-seen" onclick="updateEmailStatus('{eid}', 'seen')">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     <span>Đã Xem</span>
                   </button>
                   <button type="button" class="action-btn btn-archive" onclick="updateEmailStatus('{eid}', 'archived')">
@@ -2259,12 +2264,93 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     }}
 
     let cachedAiDraft = '';
+
+    function showToast(msg, isError) {{
+      let toast = document.getElementById('aegix-toast');
+      if (!toast) {{
+        toast = document.createElement('div');
+        toast.id = 'aegix-toast';
+        toast.style.position = 'fixed';
+        toast.style.bottom = '24px';
+        toast.style.right = '24px';
+        toast.style.padding = '10px 18px';
+        toast.style.borderRadius = '6px';
+        toast.style.fontFamily = 'var(--font-mono, monospace)';
+        toast.style.fontSize = '0.8rem';
+        toast.style.zIndex = '99999';
+        toast.style.boxShadow = '0 10px 25px rgba(0,0,0,0.6)';
+        toast.style.transition = 'all 0.25s ease';
+        document.body.appendChild(toast);
+      }}
+      toast.style.background = isError ? 'rgba(239, 68, 68, 0.95)' : 'rgba(16, 185, 129, 0.95)';
+      toast.style.color = '#ffffff';
+      toast.style.border = isError ? '1px solid #dc2626' : '1px solid #059669';
+      toast.innerText = (isError ? '[!] ' : '[OK] ') + msg;
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateY(0)';
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => {{
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+      }}, 3000);
+    }}
+
+    function copyToClipboard(text, notice) {{
+      const msg = notice || 'Đã sao chép vào bộ nhớ!';
+      if (navigator.clipboard && window.isSecureContext) {{
+        navigator.clipboard.writeText(text).then(() => {{
+          showToast(msg);
+        }}).catch(() => {{
+          fallbackCopyText(text, msg);
+        }});
+      }} else {{
+        fallbackCopyText(text, msg);
+      }}
+    }}
+
+    function fallbackCopyText(text, msg) {{
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {{
+        document.execCommand('copy');
+        showToast(msg);
+      }} catch (e) {{
+        prompt('Mã tra cứu:', text);
+      }}
+      document.body.removeChild(ta);
+    }}
+
+    function handleReply(id) {{
+      const item = document.querySelector('.email-item[data-id="' + id + '"]');
+      if (!item) return;
+      const to = item.getAttribute('data-raw-sender') || '';
+      const subject = item.getAttribute('data-raw-subject') || '';
+      const draftEl = document.getElementById('aidraft-' + id);
+      const aiDraft = draftEl ? draftEl.value : '';
+      openReplyModal(id, to, subject, aiDraft);
+    }}
+
+    function handleForward(id) {{
+      const item = document.querySelector('.email-item[data-id="' + id + '"]');
+      if (!item) return;
+      const sender = item.getAttribute('data-raw-sender') || '';
+      const subject = item.getAttribute('data-raw-subject') || '';
+      const bodyEl = document.getElementById('rawbody-' + id);
+      const bodySnippet = bodyEl ? bodyEl.value.slice(0, 1000) : '';
+      openForwardModal(id, sender, subject, bodySnippet);
+    }}
+
     function openReplyModal(id, to, subject, aiDraft) {{
       document.getElementById('reply-email-id').value = id;
       document.getElementById('reply-to').value = to;
       document.getElementById('reply-subject').value = subject.startsWith('Re:') ? subject : ('Re: ' + subject);
-      document.getElementById('reply-body').value = '';
       cachedAiDraft = aiDraft || '';
+      document.getElementById('reply-body').value = cachedAiDraft;
       
       const btnAi = document.getElementById('btn-load-ai');
       if (btnAi) {{
@@ -2288,11 +2374,17 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       document.getElementById(modalId).classList.remove('open');
     }}
 
-    function copyToClipboard(text, notice) {{
-      navigator.clipboard.writeText(text).then(() => {{
-        alert(notice || 'Đã sao chép!');
+    // Close modal on backdrop click or ESC key
+    document.querySelectorAll('.modal-backdrop').forEach(modal => {{
+      modal.addEventListener('click', (e) => {{
+        if (e.target === modal) modal.classList.remove('open');
       }});
-    }}
+    }});
+    document.addEventListener('keydown', (e) => {{
+      if (e.key === 'Escape') {{
+        document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+      }}
+    }});
 
     async function submitReply() {{
       const btn = document.getElementById('btn-submit-reply');
@@ -2302,7 +2394,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       const body = document.getElementById('reply-body').value.trim();
 
       if (!body) {{
-        alert('Vui lòng nhập nội dung phản hồi!');
+        showToast('Vui lòng nhập nội dung phản hồi!', true);
         return;
       }}
 
@@ -2317,14 +2409,14 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         }});
         const data = await res.json();
         if (data.ok) {{
-          window.location.href = '/manage?msg=Đã+gửi+phản+hồi+tới+' + encodeURIComponent(to) + '+thành+công!';
+          window.location.href = '/manage?msg=' + encodeURIComponent('Đã gửi phản hồi tới ' + to + ' thành công!');
         }} else {{
-          alert('Lỗi: ' + (data.error || 'Không thể gửi email'));
+          showToast('Lỗi: ' + (data.error || 'Không thể gửi email'), true);
           btn.disabled = false;
           btn.innerText = 'Gửi Phản Hồi Ngay &rarr;';
         }}
       }} catch(err) {{
-        alert('Lỗi kết nối: ' + err.message);
+        showToast('Lỗi kết nối: ' + err.message, true);
         btn.disabled = false;
         btn.innerText = 'Gửi Phản Hồi Ngay &rarr;';
       }}
@@ -2337,7 +2429,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       const note = document.getElementById('forward-note').value.trim();
 
       if (!to || !to.includes('@')) {{
-        alert('Vui lòng nhập địa chỉ email hợp lệ!');
+        showToast('Vui lòng nhập địa chỉ email hợp lệ!', true);
         return;
       }}
 
@@ -2352,14 +2444,14 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         }});
         const data = await res.json();
         if (data.ok) {{
-          window.location.href = '/manage?msg=Đã+chuyển+tiếp+email+tới+' + encodeURIComponent(to) + '+thành+công!';
+          window.location.href = '/manage?msg=' + encodeURIComponent('Đã chuyển tiếp email tới ' + to + ' thành công!');
         }} else {{
-          alert('Lỗi: ' + (data.error || 'Không thể chuyển tiếp'));
+          showToast('Lỗi: ' + (data.error || 'Không thể chuyển tiếp'), true);
           btn.disabled = false;
           btn.innerText = 'Chuyển Tiếp Email &rarr;';
         }}
       }} catch(err) {{
-        alert('Lỗi kết nối: ' + err.message);
+        showToast('Lỗi kết nối: ' + err.message, true);
         btn.disabled = false;
         btn.innerText = 'Chuyển Tiếp Email &rarr;';
       }}
@@ -2374,15 +2466,19 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         }});
         const data = await res.json();
         if (data.ok) {{
-          const item = document.querySelector(`.email-item[data-id="${{id}}"]`);
+          showToast(newStatus === 'seen' ? 'Đã đánh dấu email là ĐÃ XEM' : 'Đã lưu trữ email');
+          const item = document.querySelector('.email-item[data-id="' + id + '"]');
           if (item) {{
             item.setAttribute('data-status', newStatus);
             filterEmails();
           }}
-          window.location.reload();
+          setTimeout(() => {{ window.location.reload(); }}, 600);
+        }} else {{
+          showToast('Lỗi cập nhật: ' + (data.error || 'Thao tác không thành công'), true);
         }}
       }} catch(err) {{
         console.error('Update status error:', err);
+        showToast('Lỗi kết nối: ' + err.message, true);
       }}
     }}
   </script>
@@ -2923,6 +3019,8 @@ def setup_mail_system(bot_instance: commands.Bot, turso_instance: Any, app_insta
 
 def verify_manage_auth(req: Request) -> bool:
     """Verifies access via either Cookie session or x-manage-key / Bearer token."""
+    if is_manage_authenticated(req):
+        return True
     auth_key = req.headers.get("x-manage-key") or req.headers.get("authorization", "").replace("Bearer ", "").strip()
     expected_pw = os.getenv("MANAGE_PASSWORD", MANAGE_PASSWORD or "Iamprmgvyt2013@").strip()
     expected_master = os.getenv("MASTER_OWNER_KEY", MASTER_KEY or "Iamprmgvyt2013@").strip()
@@ -2935,9 +3033,6 @@ def verify_manage_auth(req: Request) -> bool:
             or (expected_master and hmac.compare_digest(auth_key, expected_master))
         ):
             return True
-    session_token = req.cookies.get("aegix_manage_session")
-    if session_token and session_token == create_session_token(expected_pw):
-        return True
     return False
 
 
