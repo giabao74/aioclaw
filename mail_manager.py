@@ -838,13 +838,26 @@ async def dispatch_email_to_discord(email_item: dict):
 
     if attachments:
         att_links = []
+        if isinstance(attachments, str):
+            try:
+                attachments = json.loads(attachments)
+            except Exception:
+                attachments = []
+        if not isinstance(attachments, list):
+            attachments = []
         for a in attachments[:5]:
-            att_name = a.get("filename", "attachment")
-            att_url = a.get("url", "#")
-            att_size = a.get("size", 0)
+            if isinstance(a, dict):
+                att_name = a.get("filename", "attachment")
+                att_url = a.get("url", "#")
+                att_size = a.get("size", 0)
+            else:
+                att_name = str(a)
+                att_url = "#"
+                att_size = 0
             size_kb = f"({att_size // 1024} KB)" if att_size else ""
             att_links.append(f"📎 [{att_name}]({att_url}) {size_kb}")
-        embed.add_field(name=f"Tệp Đính Kèm ({len(attachments)})", value="\n".join(att_links), inline=False)
+        if att_links:
+            embed.add_field(name=f"Tệp Đính Kèm ({len(attachments)})", value="\n".join(att_links), inline=False)
 
     if ai_summary:
         embed.add_field(name="🤖 AI Phân Tích Ý Định", value=f"> {ai_summary[:400]}", inline=False)
@@ -1330,15 +1343,27 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
             ai_draft = em.get("ai_draft", "")
             ai_summary = em.get("ai_summary", "")
 
-            # Attachments
+            # Attachments (Safe Dict / List / JSON string Parsing)
             atts = em.get("attachments", [])
+            if isinstance(atts, str):
+                try:
+                    atts = json.loads(atts)
+                except Exception:
+                    atts = []
+            if not isinstance(atts, list):
+                atts = []
             atts_html = ""
             if atts:
                 atts_html = '<div class="att-list">'
                 for a in atts:
-                    att_name = a.get("filename", "file")
-                    att_url = a.get("url", "#")
-                    att_size = a.get("size", 0)
+                    if isinstance(a, dict):
+                        att_name = a.get("filename", "file")
+                        att_url = a.get("url", "#")
+                        att_size = a.get("size", 0)
+                    else:
+                        att_name = str(a)
+                        att_url = "#"
+                        att_size = 0
                     size_kb = f"({att_size // 1024} KB)" if att_size else ""
                     atts_html += f'<a href="{att_url}" target="_blank" class="att-tag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg> <span>{att_name} {size_kb}</span></a>'
                 atts_html += '</div>'
