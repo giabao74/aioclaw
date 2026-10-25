@@ -1087,26 +1087,33 @@ async def handle_resend_webhook(request: Request):
 # ──────────────────────────────────────────────
 
 def render_login_html(error: str = "") -> str:
-    err_box = f'<div class="login-err"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span>{error}</span></div>' if error else ""
+    err_box = f'''<div class="login-err">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      <span>{error}</span>
+    </div>''' if error else ""
+
     return f"""<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AEGIX · Terminal Quản Trị Hòm Thư</title>
+  <title>AEGIX · Cổng Quản Trị Hòm Thư Bảo Mật</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {{
-      --bg: #08090d;
-      --surface: #0e111a;
-      --card-bg: rgba(14, 17, 26, 0.88);
+      --bg: #06080d;
+      --surface: #0a0d15;
+      --card-bg: rgba(14, 18, 28, 0.9);
       --border: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(99, 102, 241, 0.5);
       --signal: #3b82f6;
       --signal-hover: #2563eb;
-      --amber: #f59e0b;
+      --indigo: #6366f1;
       --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #ef4444;
       --text: #f8fafc;
       --text-muted: #94a3b8;
       --font-mono: 'JetBrains Mono', monospace;
@@ -1115,10 +1122,10 @@ def render_login_html(error: str = "") -> str:
     body {{
       background-color: var(--bg);
       background-image: 
-        radial-gradient(circle at 50% 20%, rgba(20, 24, 38, 0.7) 0%, #08090d 85%),
+        radial-gradient(circle at 50% 15%, rgba(30, 41, 75, 0.45) 0%, rgba(6, 8, 13, 0.95) 75%),
         linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-      background-size: 100% 100%, 48px 48px, 48px 48px;
+      background-size: 100% 100%, 36px 36px, 36px 36px;
       color: var(--text);
       font-family: 'Inter', -apple-system, sans-serif;
       min-height: 100vh;
@@ -1129,11 +1136,11 @@ def render_login_html(error: str = "") -> str:
     }}
     .login-container {{
       width: 100%;
-      max-width: 440px;
+      max-width: 460px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 40px rgba(99, 102, 241, 0.08);
       overflow: hidden;
       position: relative;
     }}
@@ -1144,7 +1151,7 @@ def render_login_html(error: str = "") -> str:
       left: 0;
       right: 0;
       height: 2px;
-      background: linear-gradient(90deg, #3b82f6, #10b981, #f59e0b);
+      background: linear-gradient(90deg, #3b82f6, #6366f1, #10b981);
     }}
     .login-header {{
       padding: 28px 28px 20px;
@@ -1152,6 +1159,7 @@ def render_login_html(error: str = "") -> str:
       display: flex;
       align-items: center;
       justify-content: space-between;
+      background: rgba(10, 13, 21, 0.95);
     }}
     .brand {{
       display: flex;
@@ -1159,109 +1167,146 @@ def render_login_html(error: str = "") -> str:
       gap: 12px;
     }}
     .brand-icon {{
-      width: 32px;
-      height: 32px;
-      background: rgba(59, 130, 246, 0.12);
-      border: 1px solid rgba(59, 130, 246, 0.3);
+      width: 36px;
+      height: 36px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.35);
       border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--signal);
+      color: #818cf8;
+      box-shadow: 0 0 14px rgba(99, 102, 241, 0.2);
     }}
     .brand-title {{
       font-family: var(--font-mono);
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       color: #fff;
     }}
     .brand-sub {{
       font-family: var(--font-mono);
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       color: var(--text-muted);
-      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }}
+    .badge-status {{
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--emerald);
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 3px 8px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .dot-radar {{
+      width: 6px;
+      height: 6px;
+      background: var(--emerald);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--emerald);
     }}
     .login-body {{
       padding: 28px;
     }}
+    .security-notice {{
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: #fbbf24;
+      line-height: 1.5;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }}
     .login-desc {{
-      font-size: 0.88rem;
+      font-size: 0.86rem;
       color: var(--text-muted);
-      line-height: 1.6;
-      margin-bottom: 24px;
+      line-height: 1.55;
+      margin-bottom: 22px;
     }}
     .form-group {{
       margin-bottom: 20px;
     }}
-    .form-group label {{
+    .form-label {{
       display: block;
       font-family: var(--font-mono);
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      font-size: 0.74rem;
+      font-weight: 600;
       color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
       margin-bottom: 8px;
     }}
     .form-input {{
       width: 100%;
-      background: #08090d;
+      background: #080a10;
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 12px 14px;
       color: #fff;
       font-family: var(--font-mono);
-      font-size: 0.9rem;
-      outline: none;
+      font-size: 0.95rem;
       transition: all 0.2s ease;
     }}
     .form-input:focus {{
-      border-color: var(--signal);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+      outline: none;
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
     }}
     .login-btn {{
       width: 100%;
-      background: var(--signal);
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
       color: #fff;
-      border: none;
+      border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 6px;
       padding: 13px;
       font-family: var(--font-mono);
       font-size: 0.88rem;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
       transition: all 0.2s ease;
     }}
     .login-btn:hover {{
-      background: var(--signal-hover);
-      box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+      transform: translateY(-1px);
     }}
     .login-err {{
       background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.25);
+      border: 1px solid rgba(239, 68, 68, 0.3);
       border-radius: 6px;
       padding: 12px 14px;
       margin-bottom: 20px;
-      color: #ef4444;
+      color: #f87171;
       font-size: 0.82rem;
       font-family: var(--font-mono);
       display: flex;
       align-items: center;
       gap: 10px;
+      line-height: 1.4;
     }}
     .footer-note {{
       margin-top: 24px;
       text-align: center;
       font-family: var(--font-mono);
       font-size: 0.72rem;
-      color: rgba(255, 255, 255, 0.3);
-      letter-spacing: 0.02em;
+      color: rgba(255, 255, 255, 0.35);
+      letter-spacing: 0.03em;
     }}
   </style>
 </head>
@@ -1270,39 +1315,45 @@ def render_login_html(error: str = "") -> str:
     <div class="login-header">
       <div class="brand">
         <div class="brand-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         </div>
         <div>
           <div class="brand-title">AEGIX SECURE MAIL</div>
-          <div class="brand-sub">Render Inbound Bridge</div>
+          <div class="brand-sub">CYBER DEFENSE INBOUND BRIDGE</div>
         </div>
       </div>
-      <div style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--emerald); background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 2px 8px; border-radius: 4px;">ACTIVE</div>
+      <div class="badge-status">
+        <span class="dot-radar"></span>
+        <span>ONLINE</span>
+      </div>
     </div>
     <div class="login-body">
+      <div class="security-notice">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <div><strong>CHÍNH SÁCH BẢO MẬT:</strong> Phiên đăng nhập tự động hủy sau đúng <strong>60 phút</strong> kể từ lúc đăng nhập để bảo vệ toàn vẹn dữ liệu.</div>
+      </div>
       <div class="login-desc">
-        Hệ thống cổng quản trị hòm thư hỗ trợ tập trung <strong>{SUPPORT_EMAIL}</strong>. Vui lòng nhập mật khẩu quản trị cấp cao để tiếp tục.
+        Hệ thống chỉ huy hòm thư hỗ trợ chính thức <strong>{SUPPORT_EMAIL}</strong>. Vui lòng nhập mật khẩu quản trị cấp cao để tiếp tục.
       </div>
       {err_box}
       <form method="POST" action="/manage/login">
         <div class="form-group">
-          <label for="password">Mật Mã Quản Trị Quản Lý (Manage Key)</label>
+          <label class="form-label" for="password">Mật Mã Quản Trị Quản Lý (Manage Key)</label>
           <input type="password" id="password" name="password" class="form-input" placeholder="••••••••••••••••" autofocus required>
         </div>
         <button type="submit" class="login-btn">
-          <span>Xác Thực & Truy Cập</span>
+          <span>Xác Thực Truy Cập (Authenticate)</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
       </form>
-      <div class="footer-note">AES-256-GCM · TLS 1.3 · Single Point: {SUPPORT_EMAIL}</div>
+      <div class="footer-note">AES-256 · TLS 1.3 · Single Point: {SUPPORT_EMAIL}</div>
     </div>
   </div>
 </body>
 </html>"""
 
 
-def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", error_msg: str = "") -> str:
-    has_resend_key = bool(os.getenv("RESEND_API_KEY", RESEND_API_KEY).strip())
+def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", error_msg: str = "", remaining_seconds: int = 3600) -> str:
     total = len(emails)
     unread = sum(1 for e in emails if e.get("status") in ("unread", "new", "user_replied"))
     seen = sum(1 for e in emails if e.get("status") == "seen")
@@ -1325,7 +1376,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
           <div class="empty-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
           </div>
-          <div class="empty-title">HÒM THƯ ĐANG TRỐNG</div>
+          <div class="empty-title">HÒM THƯ HIỆN ĐANG TRỐNG</div>
           <div class="empty-desc">Chưa có email hỗ trợ nào gửi đến <strong>{SUPPORT_EMAIL}</strong>.<br>Khi khách gửi thư, hệ thống sẽ tự động kích hoạt thông báo qua Discord DM của Sếp!</div>
         </div>
         '''
@@ -1341,7 +1392,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
             ai_draft = em.get("ai_draft", "")
             ai_summary = em.get("ai_summary", "")
 
-            # Attachments (Safe Dict / List / JSON string Parsing)
+            # Attachments
             atts = em.get("attachments", [])
             if isinstance(atts, str):
                 try:
@@ -1366,12 +1417,15 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
                     atts_html += f'<a href="{att_url}" target="_blank" class="att-tag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg> <span>{att_name} {size_kb}</span></a>'
                 atts_html += '</div>'
 
-            # AI Summary Badge
+            # AI Summary Box
             ai_summary_html = ""
             if ai_summary:
                 ai_summary_html = f'''
                 <div class="ai-summary-box">
-                  <div class="ai-summary-header"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> <span>AI SUMMARY & INTENT</span></div>
+                  <div class="ai-summary-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <span>AI SUMMARY & INTENT ANALYSIS</span>
+                  </div>
                   <div class="ai-summary-text">{ai_summary}</div>
                 </div>
                 '''
@@ -1470,21 +1524,23 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AEGIX · Trung Tâm Chỉ Huy Hòm Thư</title>
+  <title>AEGIX · Trung Tâm Chỉ Huy Hòm Thư Bảo Mật</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {{
-      --bg: #08090d;
-      --surface: #0e111a;
-      --card-bg: rgba(14, 17, 26, 0.92);
+      --bg: #06080d;
+      --surface: #0a0d15;
+      --card-bg: rgba(14, 18, 28, 0.92);
       --border: rgba(255, 255, 255, 0.08);
-      --border-hover: rgba(255, 255, 255, 0.16);
+      --border-hover: rgba(99, 102, 241, 0.35);
       --signal: #3b82f6;
       --signal-hover: #2563eb;
+      --indigo: #6366f1;
       --amber: #f59e0b;
       --emerald: #10b981;
+      --rose: #ef4444;
       --fuchsia: #d946ef;
       --text: #f8fafc;
       --text-muted: #94a3b8;
@@ -1494,10 +1550,10 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     body {{
       background-color: var(--bg);
       background-image: 
-        radial-gradient(circle at 50% 0%, rgba(20, 24, 38, 0.7) 0%, #08090d 80%),
+        radial-gradient(circle at 50% 0%, rgba(30, 41, 75, 0.4) 0%, rgba(6, 8, 13, 0.95) 75%),
         linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-      background-size: 100% 100%, 48px 48px, 48px 48px;
+      background-size: 100% 100%, 36px 36px, 36px 36px;
       color: var(--text);
       font-family: 'Inter', -apple-system, sans-serif;
       min-height: 100vh;
@@ -1508,8 +1564,8 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     /* Topbar */
     .topbar {{
       height: 64px;
-      background: rgba(8, 9, 13, 0.85);
-      backdrop-filter: blur(12px);
+      background: rgba(6, 8, 13, 0.88);
+      backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--border);
       padding: 0 28px;
       display: flex;
@@ -1525,108 +1581,195 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       gap: 14px;
     }}
     .brand-icon {{
-      width: 34px;
-      height: 34px;
-      background: rgba(59, 130, 246, 0.12);
-      border: 1px solid rgba(59, 130, 246, 0.3);
+      width: 36px;
+      height: 36px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.35);
       border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--signal);
+      color: #818cf8;
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.25);
     }}
     .brand-title {{
       font-family: var(--font-mono);
       font-size: 0.95rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       color: #fff;
     }}
     .brand-sub {{
       font-family: var(--font-mono);
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       color: var(--text-muted);
       text-transform: uppercase;
+      letter-spacing: 0.03em;
     }}
     .topbar-actions {{
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }}
     .pill-badge {{
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border);
+      gap: 7px;
       padding: 5px 12px;
-      border-radius: 20px;
+      border-radius: 6px;
+      background: rgba(14, 18, 28, 0.8);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
       color: var(--text-muted);
     }}
-    .dot-pulse {{
+    .pill-radar {{
+      border-color: rgba(16, 185, 129, 0.25);
+      color: var(--emerald);
+    }}
+    .dot-radar {{
       width: 6px;
       height: 6px;
-      border-radius: 50%;
       background: var(--emerald);
+      border-radius: 50%;
       box-shadow: 0 0 8px var(--emerald);
+      animation: pulseRadar 2s infinite ease-in-out;
+    }}
+    @keyframes pulseRadar {{
+      0%, 100% {{ transform: scale(1); opacity: 1; }}
+      50% {{ transform: scale(1.3); opacity: 0.7; }}
+    }}
+    .pill-timer {{
+      border-color: rgba(245, 158, 11, 0.3);
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.08);
+      font-weight: 600;
+    }}
+    .pill-timer.urgent {{
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #f87171;
+      background: rgba(239, 68, 68, 0.12);
+      animation: pulseUrgent 1s infinite alternate;
+    }}
+    @keyframes pulseUrgent {{
+      from {{ box-shadow: 0 0 4px rgba(239, 68, 68, 0.3); }}
+      to {{ box-shadow: 0 0 14px rgba(239, 68, 68, 0.7); }}
+    }}
+    .pill-owner {{
+      border-color: rgba(99, 102, 241, 0.3);
+      color: #818cf8;
+    }}
+    .btn-compose {{
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }}
+    .btn-compose:hover {{
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.45);
+      transform: translateY(-1px);
     }}
     .btn-logout {{
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.2);
-      color: #ef4444;
-      padding: 5px 14px;
+      padding: 6px 14px;
       border-radius: 6px;
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #f87171;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      font-weight: 600;
       text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
       transition: all 0.2s ease;
     }}
     .btn-logout:hover {{
       background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #fff;
     }}
 
     /* Main Container */
     .main-content {{
-      flex: 1;
-      max-width: 1280px;
-      width: 100%;
+      max-width: 1360px;
       margin: 0 auto;
+      width: 100%;
       padding: 28px;
+      flex: 1;
+    }}
+    
+    /* Alerts */
+    .status-alert {{
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 22px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }}
+    .alert-success {{
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }}
+    .alert-danger {{
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
     }}
 
     /* Stats Grid */
     .stats-grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 28px;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
     }}
     .stat-card {{
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 18px 20px;
+      border-radius: 6px;
+      padding: 16px 18px;
       position: relative;
       overflow: hidden;
+      transition: all 0.2s ease;
     }}
     .stat-card::after {{
       content: "";
       position: absolute;
       top: 0;
       left: 0;
-      width: 3px;
-      height: 100%;
+      right: 0;
+      height: 2px;
       background: var(--stat-color, var(--signal));
+      opacity: 0.85;
+    }}
+    .stat-card:hover {{
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
     }}
     .stat-label {{
       font-family: var(--font-mono);
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      font-size: 0.72rem;
       color: var(--text-muted);
-      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
     }}
     .stat-value {{
       font-family: var(--font-mono);
@@ -1635,38 +1778,22 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       color: #fff;
     }}
 
-    /* Control Toolbar */
+    /* Toolbar */
     .toolbar {{
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px 20px;
-      margin-bottom: 24px;
+      border-radius: 6px;
+      padding: 14px 18px;
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 20px;
+      margin-bottom: 24px;
     }}
     .search-box {{
       flex: 1;
-      min-width: 280px;
+      max-width: 440px;
       position: relative;
-    }}
-    .search-box input {{
-      width: 100%;
-      background: #08090d;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px 14px 10px 38px;
-      color: #fff;
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-      outline: none;
-      transition: all 0.2s ease;
-    }}
-    .search-box input:focus {{
-      border-color: var(--signal);
     }}
     .search-icon {{
       position: absolute;
@@ -1675,95 +1802,131 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       transform: translateY(-50%);
       color: var(--text-muted);
     }}
-
-    /* Filter Tabs */
+    .search-box input {{
+      width: 100%;
+      background: #080a10;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px 10px 38px;
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      transition: all 0.2s ease;
+    }}
+    .search-box input:focus {{
+      outline: none;
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }}
     .filter-tabs {{
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      gap: 6px;
+      overflow-x: auto;
     }}
     .tab-btn {{
-      font-family: var(--font-mono);
-      font-size: 0.78rem;
       background: transparent;
-      border: 1px solid var(--border);
+      border: 1px solid transparent;
       color: var(--text-muted);
       padding: 8px 14px;
       border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
     }}
     .tab-btn:hover {{
-      background: rgba(255, 255, 255, 0.04);
       color: #fff;
+      background: rgba(255, 255, 255, 0.04);
     }}
     .tab-btn.active {{
-      background: rgba(59, 130, 246, 0.12);
-      border-color: var(--signal);
+      background: rgba(99, 102, 241, 0.15);
+      border-color: rgba(99, 102, 241, 0.4);
+      color: #a5b4fc;
+    }}
+    .tab-badge {{
+      background: rgba(255, 255, 255, 0.08);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.68rem;
+    }}
+    .tab-btn.active .tab-badge {{
+      background: rgba(99, 102, 241, 0.35);
       color: #fff;
-      font-weight: 600;
     }}
 
-    /* Email Items List */
+    /* Email Items */
     .email-item {{
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 6px;
       margin-bottom: 12px;
-      transition: all 0.2s ease;
       overflow: hidden;
+      transition: all 0.2s ease;
     }}
     .email-item:hover {{
       border-color: var(--border-hover);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
     }}
     .email-header {{
       padding: 16px 20px;
-      display: grid;
-      grid-template-columns: 240px 1fr 180px;
+      display: flex;
       align-items: center;
       gap: 16px;
       cursor: pointer;
       user-select: none;
     }}
-    @media (max-width: 860px) {{
-      .email-header {{
-        grid-template-columns: 1fr;
-        gap: 8px;
-      }}
-    }}
     .email-meta-left {{
       display: flex;
       align-items: center;
-      gap: 10px;
-      overflow: hidden;
+      gap: 12px;
+      min-width: 260px;
     }}
+    .status-badge {{
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }}
+    .badge-amber {{ background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }}
+    .badge-slate {{ background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }}
+    .badge-emerald {{ background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }}
+    .badge-blue {{ background: rgba(59, 130, 246, 0.12); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.25); }}
+    .badge-fuchsia {{ background: rgba(217, 70, 239, 0.12); color: #e879f9; border: 1px solid rgba(217, 70, 239, 0.25); }}
+    .badge-muted {{ background: rgba(255, 255, 255, 0.05); color: #64748b; border: 1px solid rgba(255, 255, 255, 0.1); }}
+    
     .email-sender {{
       font-family: var(--font-mono);
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 600;
       color: #fff;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }}
     .email-subject {{
-      font-size: 0.9rem;
+      flex: 1;
+      font-size: 0.88rem;
+      font-weight: 500;
       color: #e2e8f0;
-      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
     }}
     .email-meta-right {{
       display: flex;
       align-items: center;
-      justify-content: flex-end;
-      gap: 12px;
+      gap: 16px;
     }}
     .email-time {{
       font-family: var(--font-mono);
-      font-size: 0.75rem;
+      font-size: 0.74rem;
       color: var(--text-muted);
+      white-space: nowrap;
     }}
     .chevron-icon {{
       color: var(--text-muted);
@@ -1771,160 +1934,158 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     }}
     .chevron-icon.open {{
       transform: rotate(180deg);
+      color: var(--indigo);
     }}
 
-    /* Badges */
-    .status-badge {{
-      font-family: var(--font-mono);
-      font-size: 0.7rem;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      white-space: nowrap;
-    }}
-    .badge-amber {{ background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); color: #f59e0b; }}
-    .badge-emerald {{ background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981; }}
-    .badge-blue {{ background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); color: #3b82f6; }}
-    .badge-fuchsia {{ background: rgba(217, 70, 239, 0.12); border: 1px solid rgba(217, 70, 239, 0.3); color: #d946ef; }}
-    .badge-slate {{ background: rgba(148, 163, 184, 0.12); border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8; }}
-    .badge-muted {{ background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #64748b; }}
-
-    /* Expanded Body */
+    /* Email Body Panel */
     .email-body-panel {{
       display: none;
-      padding: 20px;
-      border-top: 1px solid var(--border);
-      background: rgba(8, 9, 13, 0.6);
+      padding: 0 20px 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(8, 10, 16, 0.7);
     }}
     .email-details-grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 10px;
-      font-size: 0.82rem;
-      font-family: var(--font-mono);
-      color: var(--text-muted);
-      margin-bottom: 16px;
-      padding-bottom: 14px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      padding: 16px 0;
       border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      color: var(--text-muted);
     }}
     .email-details-grid code {{
-      color: #fff;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #cbd5e1;
     }}
+    
     .ai-summary-box {{
-      background: rgba(59, 130, 246, 0.05);
-      border: 1px solid rgba(59, 130, 246, 0.2);
+      margin: 16px 0;
+      background: rgba(99, 102, 241, 0.06);
+      border: 1px solid rgba(99, 102, 241, 0.25);
       border-radius: 6px;
-      padding: 12px 14px;
-      margin-bottom: 16px;
+      padding: 14px 16px;
     }}
     .ai-summary-header {{
       display: flex;
       align-items: center;
       gap: 8px;
       font-family: var(--font-mono);
-      font-size: 0.72rem;
+      font-size: 0.74rem;
       font-weight: 700;
-      color: var(--signal);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      color: #a5b4fc;
       margin-bottom: 6px;
     }}
     .ai-summary-text {{
-      font-size: 0.85rem;
-      color: #cbd5e1;
+      font-size: 0.86rem;
+      color: #e2e8f0;
       line-height: 1.5;
     }}
+
     .email-content-box {{
-      background: #08090d;
+      background: #080a10;
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 16px;
-      margin-bottom: 16px;
+      padding: 18px;
+      margin: 16px 0;
+      overflow-x: auto;
     }}
     .email-content-box pre {{
-      font-family: 'Inter', -apple-system, sans-serif;
-      font-size: 0.88rem;
-      color: #f1f5f9;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: #cbd5e1;
       white-space: pre-wrap;
       word-break: break-word;
-      line-height: 1.6;
     }}
+
     .att-list {{
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }}
     .att-tag {{
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: #cbd5e1;
+      text-decoration: none;
       display: flex;
       align-items: center;
       gap: 6px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border);
-      padding: 6px 12px;
-      border-radius: 4px;
-      color: var(--signal);
-      text-decoration: none;
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
       transition: all 0.2s ease;
     }}
     .att-tag:hover {{
-      background: rgba(59, 130, 246, 0.1);
-      border-color: var(--signal);
+      border-color: var(--indigo);
+      color: #fff;
+      background: rgba(99, 102, 241, 0.1);
     }}
 
-    /* Action Buttons Bar */
+    /* Action Buttons */
     .email-actions-bar {{
       display: flex;
-      flex-wrap: wrap;
+      align-items: center;
       gap: 10px;
+      padding-top: 12px;
     }}
     .action-btn {{
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      font-weight: 600;
+      cursor: pointer;
       display: flex;
       align-items: center;
       gap: 8px;
-      font-family: var(--font-mono);
-      font-size: 0.78rem;
-      font-weight: 600;
-      padding: 8px 14px;
-      border-radius: 6px;
+      transition: all 0.15s ease;
       border: 1px solid transparent;
-      cursor: pointer;
-      transition: all 0.2s ease;
     }}
     .btn-reply {{
-      background: var(--signal);
-      color: #fff;
+      background: rgba(99, 102, 241, 0.15);
+      border-color: rgba(99, 102, 241, 0.35);
+      color: #c7d2fe;
     }}
     .btn-reply:hover {{
-      background: var(--signal-hover);
+      background: rgba(99, 102, 241, 0.25);
+      border-color: #818cf8;
+      color: #fff;
     }}
     .btn-forward {{
       background: rgba(59, 130, 246, 0.12);
       border-color: rgba(59, 130, 246, 0.3);
-      color: #60a5fa;
+      color: #93c5fd;
     }}
     .btn-forward:hover {{
       background: rgba(59, 130, 246, 0.22);
+      border-color: #60a5fa;
+      color: #fff;
     }}
     .btn-seen {{
-      background: rgba(16, 185, 129, 0.12);
-      border-color: rgba(16, 185, 129, 0.3);
-      color: #34d399;
+      background: rgba(16, 185, 129, 0.08);
+      border-color: rgba(16, 185, 129, 0.25);
+      color: #6ee7b7;
     }}
     .btn-seen:hover {{
-      background: rgba(16, 185, 129, 0.22);
+      background: rgba(16, 185, 129, 0.18);
+      border-color: #34d399;
+      color: #fff;
     }}
     .btn-archive {{
-      background: rgba(148, 163, 184, 0.1);
-      border-color: var(--border);
+      background: rgba(148, 163, 184, 0.08);
+      border-color: rgba(148, 163, 184, 0.2);
       color: #cbd5e1;
     }}
     .btn-archive:hover {{
-      background: rgba(148, 163, 184, 0.2);
+      background: rgba(148, 163, 184, 0.16);
+      border-color: #e2e8f0;
+      color: #fff;
     }}
     .btn-secondary {{
       background: transparent;
@@ -1932,29 +2093,8 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       color: var(--text-muted);
     }}
     .btn-secondary:hover {{
-      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.3);
       color: #fff;
-    }}
-
-    /* Feedback Alerts */
-    .status-alert {{
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 14px 18px;
-      border-radius: 8px;
-      font-size: 0.88rem;
-      margin-bottom: 24px;
-    }}
-    .alert-success {{
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.25);
-      color: #10b981;
-    }}
-    .alert-danger {{
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.25);
-      color: #ef4444;
     }}
 
     /* Empty state */
@@ -1971,18 +2111,18 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     }}
     .empty-title {{
       font-family: var(--font-mono);
-      font-size: 1.1rem;
+      font-size: 1rem;
       font-weight: 700;
       color: #fff;
       margin-bottom: 8px;
     }}
     .empty-desc {{
-      font-size: 0.88rem;
+      font-size: 0.86rem;
       color: var(--text-muted);
-      line-height: 1.6;
+      line-height: 1.5;
     }}
 
-    /* Modal Backdrop */
+    /* Modals */
     .modal-backdrop {{
       display: none;
       position: fixed;
@@ -1990,8 +2130,8 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(8px);
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
       z-index: 100;
       align-items: center;
       justify-content: center;
@@ -2001,17 +2141,27 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       display: flex;
     }}
     .modal-dialog {{
-      background: var(--surface);
-      border: 1px solid var(--border);
+      background: #0a0d15;
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 8px;
       width: 100%;
-      max-width: 600px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      max-width: 620px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9), 0 0 40px rgba(99, 102, 241, 0.1);
       overflow: hidden;
-      animation: modalFadeIn 0.2s ease;
+      animation: modalZoom 0.18s ease-out;
+      position: relative;
     }}
-    @keyframes modalFadeIn {{
-      from {{ opacity: 0; transform: scale(0.97); }}
+    .modal-dialog::before {{
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #3b82f6, #6366f1);
+    }}
+    @keyframes modalZoom {{
+      from {{ opacity: 0; transform: scale(0.96); }}
       to {{ opacity: 1; transform: scale(1); }}
     }}
     .modal-head {{
@@ -2023,7 +2173,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     }}
     .modal-head h3 {{
       font-family: var(--font-mono);
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       font-weight: 700;
       color: #fff;
       letter-spacing: 0.04em;
@@ -2032,49 +2182,73 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       background: transparent;
       border: none;
       color: var(--text-muted);
+      font-size: 1.4rem;
       cursor: pointer;
-      font-size: 1.2rem;
       line-height: 1;
+      padding: 0 4px;
     }}
+    .modal-close:hover {{ color: #fff; }}
     .modal-body {{
       padding: 24px;
     }}
     .modal-form-group {{
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }}
     .modal-form-group label {{
       display: block;
       font-family: var(--font-mono);
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      font-size: 0.74rem;
+      font-weight: 600;
       color: var(--text-muted);
+      text-transform: uppercase;
       margin-bottom: 6px;
+      letter-spacing: 0.03em;
     }}
     .modal-input {{
       width: 100%;
-      background: #08090d;
+      background: #080a10;
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 10px 14px;
       color: #fff;
-      font-family: 'Inter', -apple-system, sans-serif;
-      font-size: 0.88rem;
-      outline: none;
+      font-family: var(--font-mono);
+      font-size: 0.86rem;
       transition: all 0.2s ease;
     }}
     .modal-input:focus {{
-      border-color: var(--signal);
+      outline: none;
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }}
+    .modal-input[readonly] {{
+      opacity: 0.7;
+      cursor: not-allowed;
+      background: rgba(255, 255, 255, 0.02);
     }}
     textarea.modal-input {{
       resize: vertical;
       min-height: 140px;
+      line-height: 1.5;
     }}
     .modal-actions {{
       display: flex;
       justify-content: flex-end;
-      gap: 12px;
-      margin-top: 20px;
+      gap: 10px;
+      margin-top: 22px;
+    }}
+
+    @media (max-width: 1024px) {{
+      .stats-grid {{ grid-template-columns: repeat(3, 1fr); }}
+    }}
+    @media (max-width: 768px) {{
+      .topbar {{ padding: 0 16px; height: auto; padding: 12px 16px; flex-wrap: wrap; gap: 10px; }}
+      .topbar-actions {{ flex-wrap: wrap; width: 100%; justify-content: flex-start; }}
+      .stats-grid {{ grid-template-columns: repeat(2, 1fr); }}
+      .toolbar {{ flex-direction: column; align-items: stretch; }}
+      .search-box {{ max-width: 100%; }}
+      .email-details-grid {{ grid-template-columns: 1fr; }}
+      .email-header {{ flex-direction: column; align-items: flex-start; gap: 8px; }}
+      .email-meta-left {{ width: 100%; justify-content: space-between; }}
     }}
   </style>
 </head>
@@ -2086,18 +2260,33 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       </div>
       <div>
         <div class="brand-title">AEGIX SECURE MAIL TERMINAL</div>
-        <div class="brand-sub">Hộp Thư Quản Trị Hỗ Trợ Khách Hàng</div>
+        <div class="brand-sub">THREAT INTELLIGENCE & INBOUND OPERATIONS</div>
       </div>
     </div>
     <div class="topbar-actions">
+      <div class="pill-badge pill-radar">
+        <span class="dot-radar"></span>
+        <span>RESEND SECURE</span>
+      </div>
+      <div class="pill-badge pill-timer" id="session-pill" title="Tự động đăng xuất sau đúng 60 phút kể từ lúc đăng nhập">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>AUTO-LOCK:</span>
+        <span id="session-countdown">60:00</span>
+      </div>
       <div class="pill-badge">
-        <span class="dot-pulse"></span>
         <span>{SUPPORT_EMAIL}</span>
       </div>
-      <div class="pill-badge" style="border-color: rgba(59, 130, 246, 0.3); color: #60a5fa;">
+      <div class="pill-badge pill-owner">
         <span>OWNER: 1262304052361035857</span>
       </div>
-      <a href="/manage/logout" class="btn-logout">Đăng Xuất</a>
+      <button type="button" class="btn-compose" onclick="openComposeModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>Soạn Thư Mới</span>
+      </button>
+      <a href="/manage/logout" class="btn-logout">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        <span>Đăng Xuất</span>
+      </a>
     </div>
   </div>
 
@@ -2121,7 +2310,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         <div class="stat-label">Đã Trả Lời</div>
         <div class="stat-value">{replied}</div>
       </div>
-      <div class="stat-card" style="--stat-color: #3b82f6;">
+      <div class="stat-card" style="--stat-color: #6366f1;">
         <div class="stat-label">Đã Chuyển Tiếp</div>
         <div class="stat-value">{forwarded}</div>
       </div>
@@ -2137,17 +2326,45 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         <input type="text" id="email-search" placeholder="Tìm theo ID, người gửi, tiêu đề..." oninput="filterEmails()">
       </div>
       <div class="filter-tabs">
-        <button type="button" class="tab-btn active" onclick="setFilter('all', this)">Tất Cả ({total})</button>
-        <button type="button" class="tab-btn" onclick="setFilter('unread', this)">Mới ({unread})</button>
-        <button type="button" class="tab-btn" onclick="setFilter('seen', this)">Đã Xem ({seen})</button>
-        <button type="button" class="tab-btn" onclick="setFilter('replied', this)">Đã Trả Lời ({replied})</button>
-        <button type="button" class="tab-btn" onclick="setFilter('forwarded', this)">Chuyển Tiếp ({forwarded})</button>
-        <button type="button" class="tab-btn" onclick="setFilter('archived', this)">Lưu Trữ ({archived})</button>
+        <button type="button" class="tab-btn active" onclick="setFilter('all', this)">Tất Cả <span class="tab-badge">{total}</span></button>
+        <button type="button" class="tab-btn" onclick="setFilter('unread', this)">Mới <span class="tab-badge">{unread}</span></button>
+        <button type="button" class="tab-btn" onclick="setFilter('seen', this)">Đã Xem <span class="tab-badge">{seen}</span></button>
+        <button type="button" class="tab-btn" onclick="setFilter('replied', this)">Đã Trả Lời <span class="tab-badge">{replied}</span></button>
+        <button type="button" class="tab-btn" onclick="setFilter('forwarded', this)">Chuyển Tiếp <span class="tab-badge">{forwarded}</span></button>
+        <button type="button" class="tab-btn" onclick="setFilter('archived', this)">Lưu Trữ <span class="tab-badge">{archived}</span></button>
       </div>
     </div>
 
     <div id="email-list-container">
       {email_cards_html}
+    </div>
+  </div>
+
+  <!-- COMPOSE MODAL -->
+  <div class="modal-backdrop" id="modal-compose">
+    <div class="modal-dialog">
+      <div class="modal-head">
+        <h3>SOẠN EMAIL MỚI (AEGIX OUTBOUND)</h3>
+        <button type="button" class="modal-close" onclick="closeModal('modal-compose')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-form-group">
+          <label>Người Nhận (To Email)</label>
+          <input type="email" id="compose-to" class="modal-input" placeholder="khachhang@domain.com">
+        </div>
+        <div class="modal-form-group">
+          <label>Tiêu Đề Thư (Subject)</label>
+          <input type="text" id="compose-subject" class="modal-input" placeholder="AEGIX Support: ...">
+        </div>
+        <div class="modal-form-group">
+          <label>Nội Dung Thư (Body Text)</label>
+          <textarea id="compose-body" class="modal-input" placeholder="Kính gửi quý khách..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="action-btn btn-secondary" onclick="closeModal('modal-compose')">Hủy Bỏ</button>
+          <button type="button" class="action-btn btn-reply" id="btn-submit-compose" onclick="submitCompose()">Gửi Email Ngay &rarr;</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2170,7 +2387,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         <div class="modal-form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <label style="margin: 0;">Nội Dung Email (Body)</label>
-            <button type="button" id="btn-load-ai" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #60a5fa; font-family: var(--font-mono); font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; cursor: pointer;">✨ Dùng AI Draft</button>
+            <button type="button" id="btn-load-ai" style="background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); color: #a5b4fc; font-family: var(--font-mono); font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; cursor: pointer;">Dùng Lại AI Draft</button>
           </div>
           <textarea id="reply-body" class="modal-input" placeholder="Kính gửi quý khách..."></textarea>
         </div>
@@ -2193,7 +2410,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       <div class="modal-body">
         <div class="modal-form-group">
           <label>Chuyển Tiếp Tới (Forward To Email)</label>
-          <input type="email" id="forward-to" class="modal-input" placeholder="dev@domain.com hoặc partner@domain.com">
+          <input type="email" id="forward-to" class="modal-input" placeholder="dev@aegixbot.xyz hoặc partner@domain.com">
         </div>
         <div class="modal-form-group">
           <label>Tiêu Đề Chuyển Tiếp (Subject)</label>
@@ -2215,6 +2432,58 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
 
   <script>
     let currentFilter = 'all';
+    let remainingSeconds = {remaining_seconds};
+    let warnedSession = false;
+
+    // Countdown timer for 60m strict session
+    function updateCountdownDisplay() {{
+      if (remainingSeconds <= 0) {{
+        document.getElementById('session-countdown').innerText = '00:00';
+        showToast('Phiên làm việc đã kết thúc sau 60 phút. Đang khóa...', true);
+        setTimeout(() => {{
+          window.location.href = '/manage/logout';
+        }}, 1200);
+        return;
+      }}
+      const mins = Math.floor(remainingSeconds / 60);
+      const secs = remainingSeconds % 60;
+      const fmt = (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+      document.getElementById('session-countdown').innerText = fmt;
+
+      const pill = document.getElementById('session-pill');
+      if (remainingSeconds <= 300) {{
+        pill.classList.add('urgent');
+        if (!warnedSession) {{
+          warnedSession = true;
+          showToast('CẢNH BÁO BẢO MẬT: Phiên làm việc sẽ tự động đóng sau 5 phút!', true);
+        }}
+      }} else {{
+        pill.classList.remove('urgent');
+      }}
+      remainingSeconds--;
+    }}
+
+    setInterval(updateCountdownDisplay, 1000);
+    updateCountdownDisplay();
+
+    // Heartbeat check every 30s to verify server state without extending session
+    setInterval(async () => {{
+      try {{
+        const res = await fetch('/manage/heartbeat', {{ method: 'POST' }});
+        if (res.status === 401 || res.status === 403) {{
+          window.location.href = '/manage?err=timeout';
+          return;
+        }}
+        const data = await res.json();
+        if (data.ok && data.remaining_seconds !== undefined) {{
+          remainingSeconds = data.remaining_seconds;
+        }} else if (data.expired) {{
+          window.location.href = '/manage?err=timeout';
+        }}
+      }} catch(e) {{
+        // Offline or transient network issue
+      }}
+    }}, 30000);
 
     function toggleEmailBody(id) {{
       const panel = document.getElementById('body-' + id);
@@ -2247,7 +2516,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
 
         let matchStatus = false;
         if (currentFilter === 'all') matchStatus = true;
-        else if (currentFilter === 'unread' && (st === 'unread' || st === 'new')) matchStatus = true;
+        else if (currentFilter === 'unread' && (st === 'unread' || st === 'new' || st === 'user_replied')) matchStatus = true;
         else if (currentFilter === st) matchStatus = true;
 
         let matchSearch = true;
@@ -2292,7 +2561,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       toast._timer = setTimeout(() => {{
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(10px)';
-      }}, 3000);
+      }}, 3200);
     }}
 
     function copyToClipboard(text, notice) {{
@@ -2323,6 +2592,52 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         prompt('Mã tra cứu:', text);
       }}
       document.body.removeChild(ta);
+    }}
+
+    function openComposeModal() {{
+      document.getElementById('compose-to').value = '';
+      document.getElementById('compose-subject').value = '';
+      document.getElementById('compose-body').value = '';
+      document.getElementById('modal-compose').classList.add('open');
+    }}
+
+    async function submitCompose() {{
+      const btn = document.getElementById('btn-submit-compose');
+      const to = document.getElementById('compose-to').value.trim();
+      const subject = document.getElementById('compose-subject').value.trim();
+      const body = document.getElementById('compose-body').value.trim();
+
+      if (!to || !to.includes('@')) {{
+        showToast('Vui lòng nhập địa chỉ email hợp lệ!', true);
+        return;
+      }}
+      if (!subject || !body) {{
+        showToast('Vui lòng nhập đầy đủ tiêu đề và nội dung!', true);
+        return;
+      }}
+
+      btn.disabled = true;
+      btn.innerText = 'Đang gửi email...';
+
+      try {{
+        const res = await fetch('/api/manage/send', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ to: to, subject: subject, body: body }})
+        }});
+        const data = await res.json();
+        if (data.ok) {{
+          window.location.href = '/manage?msg=' + encodeURIComponent('Đã gửi email mới tới ' + to + ' thành công!');
+        }} else {{
+          showToast('Lỗi gửi email: ' + (data.error || 'Thao tác thất bại'), true);
+          btn.disabled = false;
+          btn.innerText = 'Gửi Email Ngay &rarr;';
+        }}
+      }} catch(err) {{
+        showToast('Lỗi kết nối: ' + err.message, true);
+        btn.disabled = false;
+        btn.innerText = 'Gửi Email Ngay &rarr;';
+      }}
     }}
 
     function handleReply(id) {{
@@ -2399,7 +2714,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       }}
 
       btn.disabled = true;
-      btn.innerText = 'Đang gửi qua Resend...';
+      btn.innerText = 'Đang gửi phản hồi...';
 
       try {{
         const res = await fetch('/api/manage/reply', {{
@@ -2488,12 +2803,12 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
 
 @mail_router.get("/manage", response_class=HTMLResponse)
 async def manage_portal(request: Request, msg: str = "", err: str = ""):
-    """Protected web management interface for support emails. Rate-limited + 60m idle timeout."""
+    """Protected web management interface for support emails. Rate-limited + strict 60m session limit from login."""
     ip = _get_client_ip(request)
     if not _rate_check(ip, "manage_portal", max_hits=60, window=60):
         log.warning(f"[SECURITY] Rate limited /manage from {ip}")
         return HTMLResponse(
-            "<html><body style='background:#050811;color:#ef4444;font-family:sans-serif;padding:40px;text-align:center'>"
+            "<html><body style='background:#06080d;color:#ef4444;font-family:sans-serif;padding:40px;text-align:center'>"
             "<h2>429 Quá nhiều yêu cầu</h2><p style='color:#94a3b8'>Vui lòng đợi một lát trước khi tải lại trang.</p></body></html>",
             status_code=429,
             headers={"Retry-After": "30"}
@@ -2502,7 +2817,7 @@ async def manage_portal(request: Request, msg: str = "", err: str = ""):
     valid, reason = check_session_status(request)
     if not valid:
         if reason == "timeout" or err == "timeout":
-            error_text = "Phiên làm việc đã tự động kết thúc sau 60 phút không hoạt động để bảo vệ dữ liệu."
+            error_text = "Phiên làm việc đã tự động kết thúc sau 60 phút kể từ lúc đăng nhập để bảo vệ an toàn."
         elif err == "1":
             error_text = "Vui lòng nhập mật khẩu quản trị để tiếp tục."
         elif err:
@@ -2511,36 +2826,44 @@ async def manage_portal(request: Request, msg: str = "", err: str = ""):
             error_text = ""
         resp = HTMLResponse(render_login_html(error=error_text))
         if reason in ("timeout", "invalid"):
+            resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/", samesite="lax", secure=True)
             resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/manage", samesite="strict", secure=True)
         return resp
+
+    # Calculate exact remaining seconds since login
+    tokens = _extract_all_session_tokens(request)
+    remaining_seconds = 3600
+    for tok in tokens:
+        issued_at, val = _parse_session_token(tok)
+        if val:
+            remaining_seconds = max(0, 3600 - int(time.time() - issued_at))
+            break
 
     emails = []
     if turso_ref:
         emails = await turso_ref.get_all_emails(limit=150)
 
-    return HTMLResponse(render_dashboard_html(emails=emails, success_msg=msg, error_msg=err))
+    return HTMLResponse(render_dashboard_html(emails=emails, success_msg=msg, error_msg=err, remaining_seconds=remaining_seconds))
+
 
 @mail_router.post("/manage/heartbeat")
 async def manage_heartbeat(request: Request):
-    """Refreshes the 60-minute idle session when user is actively interacting."""
+    """Pings session status against absolute 60m lifetime since login (does NOT extend session)."""
     ip = _get_client_ip(request)
-    if not _rate_check(ip, "manage_heartbeat", max_hits=40, window=60):
+    if not _rate_check(ip, "manage_heartbeat", max_hits=60, window=60):
         return JSONResponse({"ok": False, "message": "Too many requests"}, status_code=429)
-    if not is_manage_authenticated(request):
-        return JSONResponse({"ok": False, "expired": True, "message": "Phiên làm việc đã hết hạn"}, status_code=401)
-    new_token = create_session_token()
-    resp = JSONResponse({"ok": True, "refreshed": True, "expires_in": SESSION_IDLE_SECONDS})
-    resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/manage")
-    resp.set_cookie(
-        key=_SESSION_COOKIE_NAME,
-        value=new_token,
-        max_age=SESSION_IDLE_SECONDS,
-        httponly=True,
-        samesite="lax",
-        secure=True,
-        path="/",
-    )
-    return resp
+    tokens = _extract_all_session_tokens(request)
+    for tok in tokens:
+        issued_at, val = _parse_session_token(tok)
+        if val:
+            elapsed = time.time() - issued_at
+            if elapsed <= SESSION_IDLE_SECONDS:
+                remaining = int(SESSION_IDLE_SECONDS - elapsed)
+                return JSONResponse({"ok": True, "expired": False, "remaining_seconds": remaining})
+            else:
+                return JSONResponse({"ok": False, "expired": True, "message": "Phiên làm việc đã hết hạn sau 60 phút kể từ lúc đăng nhập."}, status_code=401)
+    return JSONResponse({"ok": False, "expired": True, "message": "Phiên làm việc không hợp lệ hoặc đã hết hạn."}, status_code=401)
+
 
 @mail_router.post("/manage/login")
 async def manage_login(request: Request):
@@ -2559,9 +2882,9 @@ async def manage_login(request: Request):
     if hmac.compare_digest(password, expected):
         token = create_session_token()
         resp  = RedirectResponse(url="/manage", status_code=303)
-        # Clear legacy path="/manage" cookie to avoid duplicate cookie collisions in Chrome
+        # Clear legacy path="/manage" cookie
         resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/manage")
-        # Set new session cookie with root path="/" and samesite="lax" for 100% browser compatibility
+        # Set new session cookie with root path="/" and samesite="lax"
         resp.set_cookie(
             key=_SESSION_COOKIE_NAME,
             value=token,
@@ -2579,14 +2902,16 @@ async def manage_login(request: Request):
         status_code=401,
     )
 
+
 @mail_router.get("/manage/logout")
 async def manage_logout(request: Request):
     """Logs out: clears signed session cookie across all paths and redirects to /manage."""
-    resp = RedirectResponse(url="/manage", status_code=303)
+    resp = RedirectResponse(url="/manage?msg=Đã+đăng+xuất+an+toàn!", status_code=303)
     resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/", samesite="lax", secure=True)
     resp.delete_cookie(key=_SESSION_COOKIE_NAME, path="/manage", samesite="strict", secure=True)
     log.info(f"[SECURITY] Logout from {_get_client_ip(request)}")
     return resp
+
 
 @mail_router.post("/manage/send")
 async def manage_send(request: Request):
