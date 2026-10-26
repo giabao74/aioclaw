@@ -1413,6 +1413,30 @@ def render_login_html(error: str = "") -> str:
     .login-footer a:hover {{
       color: var(--accent);
     }}
+  
+    /* ── UI/UX PRO MAX: Accessibility & Micro-interactions ── */
+    :focus-visible {{
+      outline: 2px solid var(--accent, #10b981) !important;
+      outline-offset: 2px !important;
+    }}
+    button, input, a {{
+      touch-action: manipulation;
+    }}
+    @media (prefers-reduced-motion: reduce) {{
+      *, *::before, *::after {{
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }}
+    }}
+    @media (max-width: 640px) {{
+      .btn-submit, .login-input {{
+        min-height: 44px;
+        font-size: 16px;
+      }}
+    }}
+
   </style>
 </head>
 <body>
@@ -2983,6 +3007,40 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       flex-wrap: wrap;
       gap: 12px;
     }}
+  
+    /* ── UI/UX PRO MAX: Accessibility, Tabular Telemetry & Micro-interactions ── */
+    :focus-visible {{
+      outline: 2px solid var(--accent, #10b981) !important;
+      outline-offset: 2px !important;
+    }}
+    button, a, input, select, textarea, .filter-chip, .sec-pill, .email-header {{
+      touch-action: manipulation;
+    }}
+    .stat-num, .email-time, .autolock-hud, .sec-score, code, .step-badge, .node-time {{
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1;
+    }}
+    @media (prefers-reduced-motion: reduce) {{
+      *, *::before, *::after {{
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }}
+    }}
+    @media (max-width: 768px) {{
+      .btn, .filter-chip, .modal-close, .btn-copy-mini, .audio-toggle-btn {{
+        min-height: 44px;
+      }}
+      .modal-input, .modal-textarea, select.modal-input {{
+        min-height: 44px;
+        font-size: 16px; /* Prevents iOS auto-zoom */
+      }}
+    }}
+    button:active:not(:disabled), .filter-chip:active {{
+      transform: scale(0.98);
+    }}
+
   </style>
 </head>
 <body>
@@ -3287,7 +3345,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
   </div>
 
   <!-- TOAST CONTAINER -->
-  <div id="toast-container"></div>
+  <div id="toast-container" role="status" aria-live="polite"></div>
 
   <!-- SITE FOOTER -->
   <footer class="site-footer">
@@ -3874,6 +3932,36 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         showToast('Lỗi cập nhật: ' + err.message, true);
       }}
     }}
+  
+    // UI/UX Pro Max: Global Keyboard Navigation
+    document.addEventListener('keydown', function(e) {{
+      // '/' to focus search bar when not typing in an input
+      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {{
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {{
+          e.preventDefault();
+          searchInput.focus();
+          searchInput.select();
+        }}
+      }}
+      // 'Escape' closes all open modals
+      if (e.key === 'Escape') {{
+        closeReplyModal();
+        closeForwardModal();
+        closeComposeModal();
+      }}
+    }});
+
+  
+    function setButtonLoading(btn, loadingText) {{
+      if (!btn) return;
+      btn.dataset.originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      btn.style.cursor = 'wait';
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="spin-icon"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg> ' + loadingText;
+    }}
+
   </script>
 </body>
 </html>"""
