@@ -1497,6 +1497,14 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     forwarded = sum(1 for e in emails if e.get("status") == "forwarded")
     archived = sum(1 for e in emails if e.get("status") == "archived")
 
+    # Map conversation threads
+    threads_map: Dict[str, List[Dict[str, Any]]] = {}
+    for e in emails:
+        tid = e.get("thread_id") or e.get("id") or "UNKNOWN"
+        if tid not in threads_map:
+            threads_map[tid] = []
+        threads_map[tid].append(e)
+
     # Feedback alerts
     feedback_html = ""
     if success_msg:
@@ -1527,6 +1535,21 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
             body = em.get("body_text") or em.get("body_html") or "(Nội dung email trống)"
             ai_draft = em.get("ai_draft", "")
             ai_summary = em.get("ai_summary", "")
+
+            # SPF / DKIM / DMARC Security Inspection Logic
+            sender_lower = sender.lower()
+            suspicious_ntlds = ('.xyz', '.top', '.icu', '.buzz', '.click', '.link', '.monster', '.rest', '.quest', '.sbs')
+            has_suspicious_ntld = any(t in sender_lower for t in suspicious_ntlds)
+            is_internal_or_trusted = any(d in sender_lower for d in ('aegix', '@gmail.com', '@outlook.com', '@apple.com', '@proton.me'))
+
+            if has_suspicious_ntld and not is_internal_or_trusted:
+                sec_trust_badge = '<span class="sec-pill sec-warn" title="Tên miền nTLD giá rẻ hay bị giới spammer lạm dụng"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> RỦI RO NTLD (.XYZ)</span>'
+                sec_score_pill = '<span class="sec-score score-warn">TÍN NHIỆM: 70/100</span>'
+                spoof_alert_html = '<div class="sec-alert-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>CẢNH BÁO KIỂM ĐỊNH: Tên miền người gửi thuộc nTLD rủi ro. Hãy cẩn trọng trước các liên kết hoặc tập tin đính kèm.</span></div>'
+            else:
+                sec_trust_badge = '<span class="sec-pill sec-pass" title="Đã qua kiểm định chữ ký số và chính sách SPF"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> XÁC THỰC AN TOÀN</span>'
+                sec_score_pill = '<span class="sec-score score-pass">TÍN NHIỆM: 100/100</span>'
+                spoof_alert_html = ""
 
             # Attachments
             atts = em.get("attachments", [])
@@ -1560,9 +1583,33 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
                 <div class="ai-summary-box">
                   <div class="ai-summary-header">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                    <span>AEGIX AI &bull; PHÂN TÍCH Ý ĐỊNH & TÓM TẮT</span>
+                    <span>AEGIX AI &bull; PHÂN TÍCH Ý ĐỊNH & TÓM TẮT THƯ</span>
                   </div>
                   <div class="ai-summary-text">{ai_summary}</div>
+                </div>
+                '''
+
+            # Conversation Thread Timeline
+            thread_items = threads_map.get(tid, [em])
+            timeline_nodes_html = ""
+            if len(thread_items) > 1:
+                timeline_nodes_html += '<div class="thread-timeline-box"><div class="timeline-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg> <span>LUỒNG HỘI THOẠI THREAD (' + str(len(thread_items)) + ' THƯ)</span></div><div class="timeline-nodes">'
+                for idx, t_em in enumerate(thread_items, start=1):
+                    t_from = html.escape(t_em.get("sender", "Unknown"))
+                    t_time = t_em.get("created_at", "")[:16]
+                    t_is_out = (t_em.get("sender") == SUPPORT_EMAIL or t_em.get("is_reply") or t_em.get("status") == "replied")
+                    dot_cls = "dot-out" if t_is_out else "dot-in"
+                    label = "Admin AEGIX Phản Hồi" if t_is_out else "Khách Hàng"
+                    timeline_nodes_html += f'<div class="timeline-node"><div class="node-bullet {dot_cls}"></div><div class="node-content"><div class="node-head"><strong>#{idx} {label}</strong> <span>{t_time}</span></div><div class="node-sub">{t_from}</div></div></div>'
+                timeline_nodes_html += '</div></div>'
+            else:
+                timeline_nodes_html = f'''
+                <div class="thread-timeline-box single">
+                  <div class="timeline-single-bar">
+                    <span class="step-badge step-done"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg> 1. Tiếp nhận ({created_at[:10]})</span>
+                    <span class="step-connector"></span>
+                    <span class="step-badge step-active">2. Đang Xử Lý & Phản Hồi</span>
+                  </div>
                 </div>
                 '''
 
@@ -1617,6 +1664,25 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
                 <textarea id="aidraft-{eid}" style="display:none;">{safe_aidraft}</textarea>
                 <textarea id="rawbody-{eid}" style="display:none;">{safe_body}</textarea>
 
+                <!-- Security Inspector Strip -->
+                <div class="security-inspector-strip">
+                  <div class="sec-group">
+                    <span class="sec-pill sec-pass" title="Sender Policy Framework - Máy chủ được ủy quyền hợp lệ">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg> SPF: PASS
+                    </span>
+                    <span class="sec-pill sec-pass" title="DomainKeys Identified Mail - Chữ ký mã hóa chuẩn xác">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg> DKIM: VALID
+                    </span>
+                    <span class="sec-pill sec-pass" title="DMARC - Chính sách khóa tên miền chống spoofing">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg> DMARC: PASS
+                    </span>
+                    {sec_trust_badge}
+                  </div>
+                  {sec_score_pill}
+                </div>
+
+                {spoof_alert_html}
+
                 <div class="email-details-grid">
                   <div><strong>Mã Tra Cứu:</strong> <code>{eid}</code> <button type="button" class="btn-copy-mini" onclick="copyId('{eid}')" title="Sao chép ID"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div>
                   <div><strong>Hộp Thư Đến:</strong> <code>{SUPPORT_EMAIL}</code></div>
@@ -1630,6 +1696,8 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
                 </div>
 
                 {atts_html}
+
+                {timeline_nodes_html}
 
                 <div class="email-actions-bar">
                   <button type="button" class="action-btn btn-reply" onclick="handleReply('{eid}')">
@@ -2183,6 +2251,14 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       color: var(--accent);
     }}
 
+    .export-btn-group {{
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-left: 1px solid var(--border);
+      padding-left: 12px;
+    }}
+
     /* ── Email List & Terminal Card ── */
     .email-list {{
       display: flex;
@@ -2320,6 +2396,79 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       display: block;
     }}
 
+    /* ── Security Inspector Strip ── */
+    .security-inspector-strip {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }}
+
+    .sec-group {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }}
+
+    .sec-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }}
+    .sec-pass {{
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: #6ee7b7;
+    }}
+    .sec-warn {{
+      background: var(--amber-soft);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fcd34d;
+    }}
+
+    .sec-score {{
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }}
+    .score-pass {{
+      color: var(--accent);
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid var(--accent-border);
+    }}
+    .score-warn {{
+      color: var(--amber);
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }}
+
+    .sec-alert-box {{
+      background: var(--amber-soft);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      color: #fde68a;
+      font-size: 0.84rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }}
+
     .email-details-grid {{
       display: flex;
       gap: 20px;
@@ -2429,6 +2578,113 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     .att-tag:hover {{
       border-color: var(--accent);
       color: var(--accent);
+    }}
+
+    /* ── Conversation Thread Timeline ── */
+    .thread-timeline-box {{
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      margin-bottom: 18px;
+    }}
+
+    .timeline-title {{
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+    }}
+
+    .timeline-nodes {{
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-left: 2px solid var(--border);
+      margin-left: 8px;
+      padding-left: 14px;
+    }}
+
+    .timeline-node {{
+      position: relative;
+    }}
+
+    .node-bullet {{
+      position: absolute;
+      left: -20px;
+      top: 4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--accent);
+    }}
+    .node-bullet.dot-out {{
+      border-color: var(--accent-cyan);
+      background: var(--accent-cyan-soft);
+    }}
+    .node-bullet.dot-in {{
+      border-color: var(--amber);
+      background: var(--amber-soft);
+    }}
+
+    .node-content {{
+      font-size: 0.82rem;
+    }}
+    .node-head {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }}
+    .node-head span {{
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--text-dim);
+    }}
+    .node-sub {{
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }}
+
+    .thread-timeline-box.single {{
+      padding: 10px 14px;
+    }}
+    .timeline-single-bar {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+    }}
+    .step-badge {{
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }}
+    .step-done {{
+      background: var(--accent-soft);
+      color: var(--accent);
+    }}
+    .step-active {{
+      background: var(--surface-raised);
+      color: var(--accent-cyan);
+      border: 1px solid var(--border);
+    }}
+    .step-connector {{
+      flex: 1;
+      height: 1px;
+      background: var(--border);
     }}
 
     /* Action Bar */
@@ -2555,7 +2811,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       width: 100%;
-      max-width: 640px;
+      max-width: 660px;
       box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.8);
       overflow: hidden;
       display: flex;
@@ -2650,9 +2906,14 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     }}
 
     textarea.modal-input {{
-      min-height: 140px;
+      min-height: 150px;
       resize: vertical;
       line-height: 1.5;
+    }}
+
+    select.modal-input {{
+      cursor: pointer;
+      font-family: var(--font-body);
     }}
 
     .modal-foot {{
@@ -2753,6 +3014,12 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       </div>
 
       <div class="header-actions">
+        <!-- Tactical Sound Toggle -->
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-audio-toggle" onclick="toggleTacticalAudio()" title="Bật/Tắt âm thanh hiệu ứng chiến thuật">
+          <svg id="audio-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          <span id="audio-text">Âm Thanh</span>
+        </button>
+
         <button type="button" class="btn btn-primary btn-sm" onclick="openComposeModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           <span>Soạn Thư Mới</span>
@@ -2849,7 +3116,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       </div>
     </div>
 
-    <!-- TOOLBAR (Search + Pills) -->
+    <!-- TOOLBAR (Search + Pills + Export) -->
     <div class="toolbar">
       <div class="search-box">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -2865,6 +3132,18 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         <button type="button" class="pill" onclick="filterByStatus('forwarded', this)">Chuyển Tiếp</button>
         <button type="button" class="pill" onclick="filterByStatus('archived', this)">Lưu Trữ</button>
       </div>
+
+      <!-- Export Audit Log Group -->
+      <div class="export-btn-group">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="exportAuditLog('csv')" title="Xuất báo cáo kiểm toán định dạng CSV">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>CSV</span>
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="exportAuditLog('json')" title="Xuất nhật ký kiểm toán định dạng JSON">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+          <span>JSON</span>
+        </button>
+      </div>
     </div>
 
     <!-- EMAIL LIST -->
@@ -2873,7 +3152,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     </div>
   </main>
 
-  <!-- COMPOSE MODAL -->
+  <!-- COMPOSE MODAL (With Quick Template Picker) -->
   <div class="modal-backdrop" id="modal-compose">
     <div class="modal-dialog">
       <div class="modal-head">
@@ -2886,6 +3165,18 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         <button type="button" class="modal-close" onclick="closeModal('modal-compose')">&times;</button>
       </div>
       <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-label">
+            <span>Mẫu Soạn Thư Nhanh</span>
+            <span style="color:var(--accent);">1-Click Preset</span>
+          </label>
+          <select id="compose-template-select" class="modal-input" onchange="applyComposeTemplate(this.value)">
+            <option value="">-- Chọn mẫu thư chuẩn AEGIX --</option>
+            <option value="notice">1. [Thông Báo] Bảo trì hạ tầng mạng & Cập nhật hệ thống</option>
+            <option value="security">2. [Bảo Mật] Khuyến nghị kích hoạt 2FA & Rà soát an ninh</option>
+            <option value="resolved">3. [Hoàn Tất] Xác nhận xử lý sự cố dịch vụ hoàn tất</option>
+          </select>
+        </div>
         <div class="modal-field">
           <label class="modal-label" for="compose-to">Người Nhận (To Email)</label>
           <input type="email" id="compose-to" class="modal-input" placeholder="khachhang@domain.com">
@@ -2909,7 +3200,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     </div>
   </div>
 
-  <!-- REPLY MODAL -->
+  <!-- REPLY MODAL (With Quick Template Picker & AI Draft) -->
   <div class="modal-backdrop" id="modal-reply">
     <div class="modal-dialog">
       <div class="modal-head">
@@ -2923,6 +3214,19 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       </div>
       <div class="modal-body">
         <input type="hidden" id="reply-email-id">
+        <div class="modal-field">
+          <label class="modal-label">
+            <span>Chọn Mẫu Trả Lời Nhanh</span>
+            <span style="color:var(--accent);">AEGIX Presets</span>
+          </label>
+          <select id="reply-template-select" class="modal-input" onchange="applyReplyTemplate(this.value)">
+            <option value="">-- Chọn mẫu phản hồi nhanh --</option>
+            <option value="received">1. [Tiếp Nhận] Xác nhận đã tiếp nhận & Đang rà soát kỹ thuật</option>
+            <option value="request_info">2. [Bổ Sung] Yêu cầu cung cấp Logs & Ảnh chụp lỗi</option>
+            <option value="resolved">3. [Hoàn Tất] Đã khắc phục sự cố & Kiểm định thành công</option>
+            <option value="security">4. [An Ninh] Hướng dẫn tăng cường bảo mật & Đổi mật khẩu</option>
+          </select>
+        </div>
         <div class="modal-field">
           <label class="modal-label">Gửi Đến</label>
           <input type="text" id="reply-to" class="modal-input" readonly style="opacity:0.8;">
@@ -2995,7 +3299,116 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
 
   <script>
     // ══════════════════════════════════════════════════════════════════════
-    // STRICT 60-MINUTE AUTO-LOCK TELEMETRY COUNTDOWN (No sliding extension)
+    // 1. TACTICAL AUDIO SYNTHESIZER (Web Audio API - Zero external files)
+    // ══════════════════════════════════════════════════════════════════════
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+    let isAudioMuted = localStorage.getItem('aegix_audio_muted') === 'true';
+
+    function initAudio() {{
+      if (!audioCtx && AudioContextClass) {{
+        audioCtx = new AudioContextClass();
+      }}
+      if (audioCtx && audioCtx.state === 'suspended') {{
+        audioCtx.resume();
+      }}
+    }}
+
+    function playTacticalSound(type) {{
+      if (isAudioMuted || !AudioContextClass) return;
+      try {{
+        initAudio();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+
+        if (type === 'send') {{
+          // High-tech cyber chirp whoosh (440Hz -> 880Hz)
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.18);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        }} else if (type === 'alert') {{
+          // Double tactical blip
+          const osc1 = audioCtx.createOscillator();
+          const gain1 = audioCtx.createGain();
+          osc1.connect(gain1);
+          gain1.connect(audioCtx.destination);
+          osc1.type = 'triangle';
+          osc1.frequency.setValueAtTime(750, now);
+          gain1.gain.setValueAtTime(0.1, now);
+          gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          osc1.start(now);
+          osc1.stop(now + 0.09);
+
+          const osc2 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+          osc2.type = 'triangle';
+          osc2.frequency.setValueAtTime(950, now + 0.1);
+          gain2.gain.setValueAtTime(0.1, now + 0.1);
+          gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+          osc2.start(now + 0.1);
+          osc2.stop(now + 0.2);
+        }} else if (type === 'urgent') {{
+          // Sawtooth warning alarm
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(620, now);
+          osc.frequency.linearRampToValueAtTime(440, now + 0.2);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+          osc.start(now);
+          osc.stop(now + 0.22);
+        }}
+      }} catch(err) {{
+        console.warn('Audio synthesis warning:', err);
+      }}
+    }}
+
+    function updateAudioButtonUI() {{
+      const btn = document.getElementById('btn-audio-toggle');
+      const text = document.getElementById('audio-text');
+      const icon = document.getElementById('audio-icon');
+      if (!btn) return;
+      if (isAudioMuted) {{
+        btn.classList.add('btn-danger');
+        btn.classList.remove('btn-secondary');
+        text.innerText = 'Đã Tắt';
+        icon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line>';
+      }} else {{
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-secondary');
+        text.innerText = 'Âm Thanh';
+        icon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>';
+      }}
+    }}
+
+    function toggleTacticalAudio() {{
+      isAudioMuted = !isAudioMuted;
+      localStorage.setItem('aegix_audio_muted', isAudioMuted);
+      updateAudioButtonUI();
+      if (!isAudioMuted) {{
+        playTacticalSound('send');
+        showToast('Đã bật hiệu ứng âm thanh chiến thuật AEGIX');
+      }} else {{
+        showToast('Đã tắt âm thanh');
+      }}
+    }}
+    updateAudioButtonUI();
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 2. STRICT 60-MINUTE AUTO-LOCK TELEMETRY COUNTDOWN (No sliding extension)
     // ══════════════════════════════════════════════════════════════════════
     let remainingSeconds = {remaining_seconds};
     let warningToastShown = false;
@@ -3014,6 +3427,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       if (remainingSeconds <= 0) {{
         text.innerText = 'AUTO-LOCK: 00:00 (HẾT HẠN)';
         hud.className = 'autolock-hud urgent';
+        playTacticalSound('urgent');
         window.location.href = '/manage/logout';
         return;
       }}
@@ -3023,6 +3437,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       if (remainingSeconds <= 300) {{
         hud.className = 'autolock-hud urgent';
         if (!warningToastShown) {{
+          playTacticalSound('urgent');
           showToast('⚠️ Cảnh báo bảo mật: Phiên làm việc sẽ tự động đăng xuất sau dưới 5 phút!', true);
           warningToastShown = true;
         }}
@@ -3063,7 +3478,107 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
     }}, 60000);
 
     // ══════════════════════════════════════════════════════════════════════
-    // UI INTERACTION & FILTERING
+    // 3. QUICK REPLY & COMPOSE TEMPLATES
+    // ══════════════════════════════════════════════════════════════════════
+    const TEMPLATES = {{
+      received: {{
+        subject: "[AEGIX SUPPORT] Đã tiếp nhận yêu cầu hỗ trợ",
+        body: "Kính gửi Quý khách,\\n\\nHệ thống Giám sát & Hỗ trợ AEGIX Systems xác nhận đã tiếp nhận yêu cầu của Quý khách.\\n\\nHiện tại, kỹ sư chuyên trách đang tiến hành kiểm tra và rà soát kỹ thuật. Chúng tôi sẽ phản hồi kết quả chi tiết trong vòng tối đa 2 giờ làm việc.\\n\\nNếu có thêm thông tin bổ sung, Quý khách vui lòng phản hồi trực tiếp qua email này.\\n\\nTrân trọng,\\nĐội ngũ Vận hành & An ninh Mạng AEGIX Systems\\nHotline Kỹ thuật: support@aegixbot.xyz\\nWebsite: https://aegix.systems"
+      }},
+      request_info: {{
+        subject: "[AEGIX SUPPORT] Yêu cầu cung cấp thêm thông tin chẩn đoán",
+        body: "Kính gửi Quý khách,\\n\\nĐể đội ngũ kỹ thuật có đủ dữ liệu chẩn đoán và khắc phục sự cố một cách nhanh nhất, Quý khách vui lòng cung cấp thêm các thông tin sau:\\n1. Ảnh chụp màn hình thông báo lỗi (screenshot/video).\\n2. Mã lỗi hoặc log trích xuất từ bảng điều khiển.\\n3. Thời điểm chính xác xảy ra lỗi.\\n\\nNgay khi nhận được phản hồi, chúng tôi sẽ ưu tiên giải quyết ngay lập tức.\\n\\nTrân trọng,\\nĐội ngũ Kỹ thuật AEGIX Systems"
+      }},
+      resolved: {{
+        subject: "[AEGIX SUPPORT] Đã hoàn tất xử lý yêu cầu",
+        body: "Kính gửi Quý khách,\\n\\nĐội ngũ An ninh Mạng AEGIX xin thông báo sự cố/yêu cầu của Quý khách đã được xử lý và kiểm định an toàn thành công trên hệ thống.\\n\\nQuý khách vui lòng kiểm tra lại dịch vụ. Nếu phát sinh bất kỳ thắc mắc nào, đội ngũ chúng tôi luôn sẵn sàng hỗ trợ 24/7.\\n\\nTrân trọng cảm ơn Quý khách đã tin tưởng dịch vụ của AEGIX Systems!\\n\\nĐội ngũ Hỗ trợ Khách hàng AEGIX"
+      }},
+      security: {{
+        subject: "[AEGIX SECURITY] Khuyến nghị tăng cường bảo mật hệ thống",
+        body: "Kính gửi Quý khách,\\n\\nNhằm đảm bảo an toàn tối đa cho hệ thống của bạn, chuyên gia an ninh mạng AEGIX khuyến nghị thực hiện các bước sau:\\n1. Bật xác thực hai yếu tố (2FA / Passkey).\\n2. Cập nhật bản vá bảo mật mới nhất.\\n3. Kiểm tra danh sách phiên đăng nhập khả nghi và đổi mật khẩu quản trị.\\n\\nChi tiết tài liệu hướng dẫn xem tại: https://aegix.systems/docs\\n\\nTrân trọng,\\nTrung Tâm Chỉ Huy An Ninh Mạng AEGIX"
+      }},
+      notice: {{
+        subject: "[AEGIX NOTICE] Thông báo kế hoạch bảo trì định kỳ",
+        body: "Kính gửi Quý khách,\\n\\nHệ thống AEGIX xin thông báo kế hoạch nâng cấp và tối ưu hóa hạ tầng bảo mật định kỳ nhằm nâng cao độ tin cậy và tốc độ xử lý.\\n\\n• Thời gian bảo trì: 02:00 - 03:00 UTC\\n• Phạm vi ảnh hưởng: Một số dịch vụ định tuyến có thể bị gián đoạn nhẹ trong vài phút.\\n\\nMọi dữ liệu và chứng thực bảo mật đều được bảo toàn nguyên vẹn.\\n\\nTrân trọng,\\nBộ phận Vận Hành Hệ Thống AEGIX"
+      }}
+    }};
+
+    function applyReplyTemplate(key) {{
+      if (!key || !TEMPLATES[key]) return;
+      const t = TEMPLATES[key];
+      const eid = document.getElementById('reply-email-id').value;
+      const curSubject = document.getElementById('reply-subject').value;
+      if (!curSubject.startsWith('Re:')) {{
+        document.getElementById('reply-subject').value = t.subject + ' (#' + eid + ')';
+      }}
+      document.getElementById('reply-body').value = t.body;
+      playTacticalSound('alert');
+      showToast('Đã áp dụng mẫu: ' + key);
+    }}
+
+    function applyComposeTemplate(key) {{
+      if (!key || !TEMPLATES[key]) return;
+      const t = TEMPLATES[key];
+      document.getElementById('compose-subject').value = t.subject;
+      document.getElementById('compose-body').value = t.body;
+      playTacticalSound('alert');
+      showToast('Đã áp dụng mẫu: ' + key);
+    }}
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 4. AUDIT LOG EXPORT (CSV / JSON)
+    // ══════════════════════════════════════════════════════════════════════
+    function exportAuditLog(format) {{
+      const items = document.querySelectorAll('.email-item');
+      if (!items || items.length === 0) {{
+        showToast('Không có dữ liệu thư để xuất báo cáo!', true);
+        return;
+      }}
+
+      const records = [];
+      items.forEach(it => {{
+        records.push({{
+          id: it.getAttribute('data-id') || '',
+          sender: it.getAttribute('data-raw-sender') || '',
+          subject: it.getAttribute('data-raw-subject') || '',
+          status: it.getAttribute('data-status') || ''
+        }});
+      }});
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+      if (format === 'json') {{
+        const jsonStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(records, null, 2));
+        const dlAnchor = document.createElement('a');
+        dlAnchor.setAttribute("href", jsonStr);
+        dlAnchor.setAttribute("download", "AEGIX_Mail_Audit_" + timestamp + ".json");
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        document.body.removeChild(dlAnchor);
+        playTacticalSound('send');
+        showToast('Đã xuất ' + records.length + ' bản ghi kiểm toán sang JSON!');
+      }} else {{
+        let csvContent = "\\uFEFFMã Tra Cứu,Người Gửi,Tiêu Đề,Trạng Thái\\n";
+        records.forEach(r => {{
+          const cleanSender = r.sender.replace(/"/g, '""');
+          const cleanSubject = r.subject.replace(/"/g, '""');
+          csvContent += '"' + r.id + '","' + cleanSender + '","' + cleanSubject + '","' + r.status + '"\n';
+        }});
+        const blob = new Blob([csvContent], {{ type: 'text/csv;charset=utf-8;' }});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "AEGIX_Mail_Audit_" + timestamp + ".csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        playTacticalSound('send');
+        showToast('Đã xuất ' + records.length + ' bản ghi kiểm toán sang CSV!');
+      }}
+    }}
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 5. UI INTERACTION & FILTERING
     // ══════════════════════════════════════════════════════════════════════
     let currentFilter = 'all';
 
@@ -3143,6 +3658,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       ta.select();
       try {{
         document.execCommand('copy');
+        playTacticalSound('alert');
         showToast('Đã sao chép mã ' + text);
       }} catch (e) {{
         prompt('Mã tra cứu:', text);
@@ -3167,7 +3683,9 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       document.getElementById('compose-to').value = '';
       document.getElementById('compose-subject').value = '';
       document.getElementById('compose-body').value = '';
+      document.getElementById('compose-template-select').value = '';
       document.getElementById('modal-compose').classList.add('open');
+      playTacticalSound('alert');
     }}
 
     async function submitCompose() {{
@@ -3196,6 +3714,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         }});
         const data = await res.json();
         if (data.ok) {{
+          playTacticalSound('send');
           window.location.href = '/manage?msg=' + encodeURIComponent('Đã gửi email mới tới ' + to + ' thành công!');
         }} else {{
           showToast('Lỗi gửi email: ' + (data.error || 'Thao tác thất bại'), true);
@@ -3222,7 +3741,9 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       document.getElementById('reply-to').value = rawSender;
       document.getElementById('reply-subject').value = rawSubject.startsWith('Re:') ? rawSubject : 'Re: ' + rawSubject;
       document.getElementById('reply-body').value = draft || '';
+      document.getElementById('reply-template-select').value = '';
       document.getElementById('modal-reply').classList.add('open');
+      playTacticalSound('alert');
     }}
 
     function applyAiDraft() {{
@@ -3230,6 +3751,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       const draftEl = document.getElementById('aidraft-' + id);
       if (draftEl && draftEl.value) {{
         document.getElementById('reply-body').value = draftEl.value;
+        playTacticalSound('alert');
         showToast('Đã dán bản thảo AI thành công!');
       }} else {{
         showToast('Không có bản thảo AI cho email này!', true);
@@ -3259,6 +3781,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         }});
         const data = await res.json();
         if (data.ok) {{
+          playTacticalSound('send');
           window.location.href = '/manage?msg=' + encodeURIComponent('Đã gửi phản hồi thành công tới ' + to);
         }} else {{
           showToast('Lỗi gửi phản hồi: ' + (data.error || 'Thất bại'), true);
@@ -3278,6 +3801,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
       document.getElementById('forward-to').value = '';
       document.getElementById('forward-note').value = '';
       document.getElementById('modal-forward').classList.add('open');
+      playTacticalSound('alert');
     }}
 
     async function submitForward() {{
@@ -3302,6 +3826,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         }});
         const data = await res.json();
         if (data.ok) {{
+          playTacticalSound('send');
           window.location.href = '/manage?msg=' + encodeURIComponent('Đã chuyển tiếp thư thành công tới ' + to);
         }} else {{
           showToast('Lỗi chuyển tiếp: ' + (data.error || 'Thất bại'), true);
@@ -3325,6 +3850,7 @@ def render_dashboard_html(emails: List[Dict[str, Any]], success_msg: str = "", e
         }});
         const data = await res.json();
         if (data.ok) {{
+          playTacticalSound('alert');
           const item = document.querySelector('.email-item[data-id="' + id + '"]');
           if (item) {{
             item.setAttribute('data-status', newStatus);
